@@ -26,109 +26,80 @@ assert(len(infoset.action_names) == 2)
 # Testing KuhnCoup class
 ### Testing is_terminal()
 assert (not KSolver.KuhnCoup.is_terminal([]))
-assert (not KSolver.KuhnCoup.is_terminal([KSolver.Action.INCOME]))
-assert (not KSolver.KuhnCoup.is_terminal([KSolver.Action.INCOME, KSolver.Action.INCOME]))
-assert (not KSolver.KuhnCoup.is_terminal([KSolver.Action.INCOME, KSolver.Action.ASSASSINATE]))
-assert (not KSolver.KuhnCoup.is_terminal([
-    KSolver.Action.INCOME, KSolver.Action.ASSASSINATE,
-    KSolver.Action.BLOCK_ASSASSINATE]))
-assert (not KSolver.KuhnCoup.is_terminal([
-    KSolver.Action.INCOME, KSolver.Action.ASSASSINATE, 
-    KSolver.Action.BLOCK_ASSASSINATE, KSolver.Action.PASS, KSolver.Action.INCOME]))
-assert (KSolver.KuhnCoup.is_terminal([
-    KSolver.Action.INCOME, KSolver.Action.ASSASSINATE,
-    KSolver.Action.BLOCK_ASSASSINATE, KSolver.Action.CHALLENGE]))
-assert (KSolver.KuhnCoup.is_terminal([
-    KSolver.Action.INCOME, KSolver.Action.INCOME,
-    KSolver.Action.COUP]))
-assert (KSolver.KuhnCoup.is_terminal([
-    KSolver.Action.INCOME, KSolver.Action.INCOME,
-    KSolver.Action.INCOME, KSolver.Action.COUP]))
+assert (not KSolver.KuhnCoup.is_terminal('0'))
+assert (not KSolver.KuhnCoup.is_terminal('00'))
+assert (not KSolver.KuhnCoup.is_terminal('01'))
+assert (not KSolver.KuhnCoup.is_terminal('015'))
+assert (not KSolver.KuhnCoup.is_terminal('01531'))
+assert (KSolver.KuhnCoup.is_terminal('0154'))
+assert (KSolver.KuhnCoup.is_terminal('002'))
+assert (KSolver.KuhnCoup.is_terminal('0002'))
 
 
 ### Testing get_payoff()
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME,
-    KSolver.Action.INCOME, KSolver.Action.COUP
-]
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 0))
+history = '0002'
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME,
-    KSolver.Action.COUP
-]
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 1))
+history = '002'
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
 
-history = [KSolver.Action.ASSASSINATE, KSolver.Action.PASS]
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 0))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 0))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 0))
+history = '13'
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
 
-history = [KSolver.Action.INCOME, KSolver.Action.ASSASSINATE, KSolver.Action.PASS]
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 1))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 1))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 1))
+history = '013'
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
 
-history = [KSolver.Action.ASSASSINATE, KSolver.Action.CHALLENGE]
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 0))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CONTESSA'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'CONTESSA'], 0))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'ASSASSIN'], 0))
+history = '14'
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CONTESSA']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'CONTESSA']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'ASSASSIN']))
 
-history = [KSolver.Action.INCOME, KSolver.Action.ASSASSINATE, KSolver.Action.CHALLENGE]
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'ASSASSIN'], 1))
-assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CONTESSA'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN'], 1))
-assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'CONTESSA'], 1))
+history = '014'
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'ASSASSIN']))
+assert(1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'ASSASSIN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CIVILIAN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['ASSASSIN', 'CONTESSA']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CONTESSA', 'CIVILIAN']))
+assert(-1 == KSolver.KuhnCoup.get_payoff(history, ['CIVILIAN', 'CONTESSA']))
 
 ### Testing get_possible_actions()
-history = []
-assert([KSolver.Action.INCOME, KSolver.Action.ASSASSINATE] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Start of game
-history = [KSolver.Action.INCOME]
-assert([KSolver.Action.INCOME, KSolver.Action.ASSASSINATE] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Free turn with 1 coin
-history = [KSolver.Action.ASSASSINATE]
-assert([KSolver.Action.PASS, KSolver.Action.CHALLENGE, KSolver.Action.BLOCK_ASSASSINATE] == 
+history = ''
+assert([KSolver.Action.INCOME.value, KSolver.Action.ASSASSINATE.value] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Start of game
+history = '0'
+assert([KSolver.Action.INCOME.value, KSolver.Action.ASSASSINATE.value] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Free turn with 1 coin
+history = '1'
+assert([KSolver.Action.PASS.value, KSolver.Action.CHALLENGE.value, KSolver.Action.BLOCK_ASSASSINATE.value] == 
        KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # vs Assassination
-history = [KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE]
-assert([KSolver.Action.PASS, KSolver.Action.CHALLENGE] == 
+history = '15'
+assert([KSolver.Action.PASS.value, KSolver.Action.CHALLENGE.value] == 
        KSolver.KuhnCoup.get_possible_actions(history, 0, True)) # vs Assassination Block
-history = [KSolver.Action.INCOME, KSolver.Action.INCOME, KSolver.Action.INCOME]
-assert([KSolver.Action.INCOME, KSolver.Action.ASSASSINATE, KSolver.Action.COUP] == 
+history = '000'
+assert([KSolver.Action.INCOME.value, KSolver.Action.ASSASSINATE.value, KSolver.Action.COUP.value] == 
        KSolver.KuhnCoup.get_possible_actions(history, 2, True)) # Free turn with 2 coins
-history = [KSolver.Action.INCOME, KSolver.Action.INCOME, KSolver.Action.INCOME, KSolver.Action.INCOME]
-assert([KSolver.Action.COUP] == KSolver.KuhnCoup.get_possible_actions(history, 3, True)) # Free turn with 3 coins
-history = [KSolver.Action.INCOME, KSolver.Action.INCOME, KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, KSolver.Action.PASS, KSolver.Action.INCOME]
-assert([KSolver.Action.INCOME, KSolver.Action.ASSASSINATE] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Free turn with 1 coin
+history = '0000'
+assert([KSolver.Action.COUP.value] == KSolver.KuhnCoup.get_possible_actions(history, 3, True)) # Free turn with 3 coins
+history = '001530'
+assert([KSolver.Action.INCOME.value, KSolver.Action.ASSASSINATE.value] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # Free turn with 1 coin
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME, 
-    KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, 
-    KSolver.Action.PASS, KSolver.Action.INCOME, KSolver.Action.INCOME
-]
-assert([KSolver.Action.COUP] == KSolver.KuhnCoup.get_possible_actions(history, 3, True)) # Free turn with 3 coins
+history = '0015300'
+assert([KSolver.Action.COUP.value] == KSolver.KuhnCoup.get_possible_actions(history, 3, True)) # 3 coins+ -> Coup
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME, 
-    KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, 
-    KSolver.Action.PASS, KSolver.Action.INCOME, KSolver.Action.ASSASSINATE,
-    KSolver.Action.BLOCK_ASSASSINATE
-]
-assert([KSolver.Action.CHALLENGE] == KSolver.KuhnCoup.get_possible_actions(history, 0, False)) # vs Second Assassination Block
+history = '00153015'
+assert([KSolver.Action.CHALLENGE.value] == KSolver.KuhnCoup.get_possible_actions(history, 0, False)) # vs Second Assassination Block
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME, 
-    KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, 
-    KSolver.Action.PASS, KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE,
-]
-assert([KSolver.Action.PASS, KSolver.Action.CHALLENGE] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # vs Second Assassination Block
+history = '0015315'
+assert([KSolver.Action.PASS.value, KSolver.Action.CHALLENGE.value] == KSolver.KuhnCoup.get_possible_actions(history, 1, True)) # vs Second Assassination Block
 
 
 
@@ -138,41 +109,138 @@ trainer = KSolver.KuhnCFRTrainer()
 assert(len(trainer.infoset_map) == 0)
 
 ### Testing get_information_set()
-history = []
+history = ''
 coins = [1,1]
-trainer.get_information_set('CONTESSA',coins, history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
+trainer.get_information_set('CONTESSA', history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
 assert(len(trainer.infoset_map) == 1)
-assert('CONTESSA11' in trainer.infoset_map.keys())
+assert('CONTESSA' in trainer.infoset_map.keys())
 
-history = [KSolver.Action.INCOME]
+history = '0'
 coins = [2,1]
-trainer.get_information_set('ASSASSIN',coins, history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
+trainer.get_information_set('ASSASSIN', history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
 assert(len(trainer.infoset_map) == 2)
-assert('ASSASSIN210' in trainer.infoset_map.keys())
+assert('ASSASSIN0' in trainer.infoset_map.keys())
 
-trainer.get_information_set('ASSASSIN',coins, history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
+trainer.get_information_set('ASSASSIN', history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
 assert(len(trainer.infoset_map) == 2)
-assert('ASSASSIN210' in trainer.infoset_map.keys())
+assert('ASSASSIN0' in trainer.infoset_map.keys())
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME, 
-    KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, 
-    KSolver.Action.PASS, KSolver.Action.INCOME, KSolver.Action.INCOME
-]
+history = '0015300'
 coins = [1,2]
-trainer.get_information_set('ASSASSIN',coins, history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
+trainer.get_information_set('ASSASSIN', history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
 assert(len(trainer.infoset_map) == 3)
-assert('ASSASSIN120015300' in trainer.infoset_map.keys())
+assert('ASSASSIN0015300' in trainer.infoset_map.keys())
 
-history = [
-    KSolver.Action.INCOME, KSolver.Action.INCOME, 
-    KSolver.Action.ASSASSINATE, KSolver.Action.BLOCK_ASSASSINATE, 
-    KSolver.Action.PASS, KSolver.Action.INCOME, KSolver.Action.INCOME
-]
+history = '0015300'
 coins = [1,2]
-trainer.get_information_set('CONTESSA',coins, history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
+trainer.get_information_set('CONTESSA', history, KSolver.KuhnCoup.get_possible_actions(history,1,True))
 assert(len(trainer.infoset_map) == 4)
-assert('CONTESSA120015300' in trainer.infoset_map.keys())
+assert('CONTESSA0015300' in trainer.infoset_map.keys())
+
+# ### Testing is_p1_key()
+# key = 'CONTESSA'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA00'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA01'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA15'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA13'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA000002'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+# key = 'CONTESSA14'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == True)
+
+# key = 'ASSASSIN0'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN001'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN002'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN1'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN000'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN015'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'ASSASSIN00154'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'CIVILIAN000'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+# key = 'CIVILIAN013'
+# assert(KSolver.KuhnCoup.is_p1_key(key) == False)
+
+# # Testing MESFinder()
+# ### Testing get_child_keys()
+# all_keys = [
+#     'CONTESSA0', 'CONTESSA00', 'CONETSSA000',
+#     'CONTESSA01', 'CONTESSA001', 'CONETSSA0001',
+#     'CONTESSA1', 'CONTESSA14', 'CONETSSA153',
+#     'CONTESSA015', 'CONTESSA13', 'CONETSSA002',
+#     'CONTESSA0002', 'CONTESSA00014', 'CONETSSA00154',
+#     'ASSASSIN', 'ASSASSIN00', 'ASSASSIN000',
+#     'ASSASSIN01', 'ASSASSIN001', 'ASSASSIN0001',
+#     'ASSASSIN1', 'ASSASSIN14', 'ASSASSIN153',
+#     'ASSASSIN015', 'ASSASSIN13', 'ASSASSIN002',
+#     'ASSASSIN0002', 'ASSASSIN00014', 'ASSASSIN00154',
+#     'CIVILIAN', 'CIVILIAN00', 'CIVILIAN000',
+#     'CIVILIAN01', 'CIVILIAN001', 'CIVILIAN0001',
+#     'CIVILIAN1', 'CIVILIAN14', 'CIVILIAN153',
+#     'CIVILIAN015', 'CIVILIAN13', 'CIVILIAN002',
+#     'CIVILIAN0002', 'CIVILIAN00014', 'CIVILIAN00154'
+# ]
+# mes_finder = KSolver.MESFinder({}, all_keys)
+# assert(set(mes_finder.get_child_keys('CONTESSA0')) ==  {'ASSASSIN00', 'ASSASSIN01', 'CIVILIAN00', 'CIVILIAN01'})
+# assert(set(mes_finder.get_child_keys('ASSASSIN01')) ==  {'CONTESSA015', 'CIVILIAN015'})
+
+
+# ### Testing get_payoff_for_mes()
+# cur_key = 'ASSASSIN0002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'ASSASSIN0002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'ASSASSIN002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'ASSASSIN00002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA00002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA0002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'CONTESSA002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA002'
+# assert(-1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'CONTESSA0013'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'CONTESSA0013'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA0013'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA013'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'CONTESSA13'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, False))
+
+# cur_key = 'CONTESSA0154'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, True))
+
+# cur_key = 'CONTESSA00154'
+# assert(1 == mes_finder.get_payoff_for_mes(cur_key, False))
 
 
 print("No Assertion Errors")
