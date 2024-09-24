@@ -11,3 +11,4 @@ Best Response
 # Currently Working On...
 * Expansion of the game from the mini version to the full game state.
 * Optimization of the game tree to enable fast and practical search by reducing its size.
+* An interactive UI to display the strategies.
