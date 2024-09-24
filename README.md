@@ -1,15 +1,13 @@
 # Coup Solver
-A solver for a popular board game "Coup" that uses a counterfactual regret minimization (CFR) to converge strategies to nash equilibrium. Optimal strategies are found for a 1v1 game format.
+A solver for the board game "Coup" that employs counterfactual regret minimization (CFR) to determine optimal strategies for a 1v1 format.
 
-# How the Solver works
-Counterfactual Regert Minimization
-* Explain CFR
-
-Infoset
-* infoset
+# How the Solver Works
+Counterfactual Regert Minimization (CFR)
+* CFR is an algorithm that computes optimal strategies in games with incomplete information by tracking and minimizing regret. It evaluates hypothetical scenarios to refine player decisions, ultimately converging towards Nash equilibrium for optimal gameplay.
 
 Best Response
-* Explain exploitability and how to lower it
+* Strategies derived from CFR may approach Nash equilibrium but can still be exploitable. A Best Response function calculates exploitability by finding the strategy that maximally exploits current strategies. The function reveals how opponents can take advantage of weaknesses and assesses the exploitability of the current strategy.
 
 # Currently Working On...
-* Expanding the game from the mini version to the full game state.
+* Expansion of the game from the mini version to the full game state.
+* Optimization of the game tree to enable fast and practical search by reducing its size.
