@@ -1,6 +1,9 @@
 # Coup Solver
 A solver for the board game "Coup" that employs counterfactual regret minimization (CFR) to determine optimal strategies for a 1v1 format.
 
+![coup zz](https://github.com/user-attachments/assets/fc7a7c7e-344c-4ffd-bcd5-cf6a677fd049)
+
+
 # How the Solver Works
 Counterfactual Regert Minimization (CFR)
 * CFR is an algorithm that computes optimal strategies in games with incomplete information by tracking and minimizing regret. It evaluates hypothetical scenarios to refine player decisions, ultimately converging towards Nash equilibrium for optimal gameplay.
