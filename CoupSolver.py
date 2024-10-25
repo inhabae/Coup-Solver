@@ -1,27 +1,15 @@
 '''
 Coup:
 A popular board game Coup in the format of 1v1.
-
-The deck consists of 
-Each player has one card and starts with one coin.
-
-Players on their turn can:
-    1) INCOME (gets one coin)
-    2) ASSASSINATE (takes up 1 coin)
-    3) COUP (takes up 2 coins)
-
-Players against an ASSASSINATION can:
-    1) CHALLENGE 
-    2) PASS 
-    3) BLOCK ASSASSINATION
-
-At three coins or more, player must Coup.
-Whoever eliminates the other player first wins.
+As of 2024-10-24, 3 additonal Captains replace 3 Ambassadors.
+Some moves are limited, based on my assumption that they are not practically never played.
+(This was done in order to limit the game tree, due to the limited resources I have.)
 '''
-from enum import Enum
+
 import numpy as np
-from typing import List
 import random 
+from enum import Enum
+import time
 import pickle 
 
 # Each action will be represented by an according integer.
@@ -128,17 +116,26 @@ class Coup():
         raise ValueError
 
     @staticmethod
+    def get_lives(cards: List[str]) -> int:
+        lives = 2
+        for card in cards:
+            if card[:4] == 'DEAD':
+                lives -= 1
+
+        return lives
+
+    @staticmethod
     def get_possible_actions(history: List[str], my_coins: int, my_cards: List, opp_lives: int, opp_coins: int) -> List[str]:
         # NOTE: Only to be called when is_terminal() is False
 
         # steal_value is the stealing action an active player can perform
-        steal_value = None
+        # Stealing 0 coins is dominated thus removed from the game tree
+        steal_value = []
         if opp_coins >= 2:
-            steal_value = Action.STEAL_2.value
+            steal_value = [Action.STEAL_2.value]
         elif opp_coins == 1:
-            steal_value = Action.STEAL_1.value
-        else:
-            steal_value = Action.STEAL_0.value
+            steal_value = [Action.STEAL_1.value]
+
 
 
         if len(history) == 0:
@@ -167,14 +164,14 @@ class Coup():
         # If I have one life and opponent has 7+ coins, MUST STEAL or ASSASSINATE    
         elif len(my_cards) < 2 and opp_coins >= 7:
             if my_coins >= 7:
-                possible_independent_actions = [Action.ASSASSINATE.value, steal_value, Action.COUP.value]
+                possible_independent_actions = [Action.ASSASSINATE.value, Action.COUP.value] + steal_value
             elif my_coins >= 3:
-                possible_independent_actions = [Action.ASSASSINATE.value, steal_value]
+                possible_independent_actions = [Action.ASSASSINATE.value]  + steal_value
             else:
-                possible_independent_actions = [steal_value]
+                possible_independent_actions = steal_value
         else:
             possible_independent_actions += [Action.INCOME.value, Action.FOREIGN_AID.value, 
-                                            Action.TAX.value, steal_value]
+                                            Action.TAX.value]  + steal_value
             if my_coins >= 3:
                 possible_independent_actions.append(Action.ASSASSINATE.value)
             if my_coins >= 7:
@@ -200,17 +197,20 @@ class Coup():
         elif last_action in [Action.BLOCK_ASSASSINATE.value, Action.BLOCK_FOREIGN_AID.value, Action.BLOCK_STEAL.value]: 
             return [Action.PASS.value, Action.CHALLENGE.value]
         # If last action was a CHALLENGE, return showing cards
+
+        # TODO: I am assuming showing a card is always better than losing a card.
+        # This may not be GTO and will be revisited once I can explore a bigger game tree.
         elif last_action == Action.CHALLENGE.value:
             challenged_action = history[-2]
             if challenged_action in [Action.ASSASSINATE.value] and 'ASSASSIN' in my_cards:
-                return [Action.SHOW_CARD.value] + possible_losses
+                return [Action.SHOW_CARD.value] # + possible_losses
             elif challenged_action in [Action.TAX.value, Action.BLOCK_FOREIGN_AID.value] and 'DUKE' in my_cards:
-                return [Action.SHOW_CARD.value] + possible_losses
+                return [Action.SHOW_CARD.value] # + possible_losses
             elif challenged_action in [Action.STEAL_0.value, Action.STEAL_1.value,
                                         Action.STEAL_2.value, Action.BLOCK_STEAL.value] and 'CAPTAIN' in my_cards:
-                return [Action.SHOW_CARD.value] + possible_losses
+                return [Action.SHOW_CARD.value] # + possible_losses
             elif challenged_action in [Action.BLOCK_ASSASSINATE.value] and 'CONTESSA' in my_cards:
-                return [Action.SHOW_CARD.value] + possible_losses
+                return [Action.SHOW_CARD.value] # + possible_losses
             else:
                 return possible_losses
         # If opponent lost a card, independent turn
@@ -236,9 +236,14 @@ class CoupCFRTrainer():
         self.infoset_map = {}
         self.terminal_node_keys = set()
 
-    def get_information_set(self, my_cards: List[str], history: List[str], possible_actions: List[int]) -> InfoSet:
+    def get_information_set(self, my_cards: List[str], history: List[str], possible_actions: List[int], active_player: int, initial_cards: List[str]) -> InfoSet:
         # my_cards is alphabetically ordered, only including alive cards.
         card_str = ''
+        if active_player == 0:
+            card_str += ''.join(initial_cards[:2])
+        else:
+            card_str += ''.join(initial_cards[:4])
+
         my_cards = sorted(my_cards)
         if len(my_cards) > 1:
             card_str += my_cards[0] + my_cards[1]
@@ -254,23 +259,31 @@ class CoupCFRTrainer():
         return self.infoset_map[infoset_key]
     
 
-    # move_counter is for 15-move rule where if no lives have been lost for 15 full turns, its an automatic draw.
+    # move_counter is for x-move rule where if no lives have been lost for x full turns, its an automatic draw.
     # Taken from 50-move rule from chess, this ensures that the game tree is limited while not disrupting GTO.
-    # The number 15 may not be the best number, but this will be tested in some time.
-    def cfr(self, my_cards: List[str], opp_cards: List[str], coins: List[int], 
+    # The best number for x will be tested in some time.
+    def cfr(self, initial_cards: List[str], my_cards: List[str], opp_cards: List[str], coins: List[int], 
             history: str, reach_probabilities: np.array, active_player: int, deck: List[str], move_counter):
-         
         # print(len(history))
         # if move_counter >= 8: automatic draw
-        if move_counter >= 3:
+        if move_counter >= 4:
             return 0
 
         if Coup.is_terminal(my_cards, opp_cards):
             card_str = ''
+
+            if active_player == 0:
+                card_str += ''.join(initial_cards[:2])
+            elif active_player == 1:
+                card_str += ''.join(initial_cards[-2:])
+
+
+
             my_cards = sorted(my_cards)
             if len(my_cards) > 1:
                 card_str += my_cards[0] + my_cards[1]
             else:
+                raise ValueError
                 card_str += str(my_cards[0])
 
             self.terminal_node_keys.add(card_str + ''.join(history)) # saving terminal keys for MES calculation purposes
@@ -280,7 +293,7 @@ class CoupCFRTrainer():
         
         possible_actions = Coup.get_possible_actions(history, coins[active_player], my_cards, len(opp_cards), coins[1 - active_player])
 
-        infoset = self.get_information_set(my_cards, history, possible_actions)
+        infoset = self.get_information_set(my_cards, history, possible_actions, active_player, initial_cards)
         strategy = infoset.get_strategy(reach_probabilities[active_player])
 
         opponent = 1 - active_player
@@ -296,6 +309,7 @@ class CoupCFRTrainer():
             new_coins = coins[:]
             new_history = history[:]
             new_my_cards = my_cards[:]
+            new_opp_cards = opp_cards[:]
             new_deck = deck[:]
             new_move_counter = move_counter
 
@@ -454,9 +468,9 @@ class CoupCFRTrainer():
                 if len(history) > 3 and history[-1] == Action.SHOW_CARD.value and history[-3] not in [
                 Action.BLOCK_ASSASSINATE.value, Action.BLOCK_FOREIGN_AID.value, Action.BLOCK_STEAL.value
                 ]:
-                    counterfactual_values[ix] = self.cfr(new_my_cards, opp_cards, new_coins, new_history, new_reach_probabilities, opponent, new_deck, new_move_counter)
+                    counterfactual_values[ix] = self.cfr(initial_cards, new_my_cards, new_opp_cards, new_coins, new_history, new_reach_probabilities, active_player, new_deck, new_move_counter)
             else:
-                counterfactual_values[ix] = -self.cfr(opp_cards, new_my_cards, new_coins, new_history, new_reach_probabilities, opponent, new_deck, new_move_counter)
+                counterfactual_values[ix] = -self.cfr(initial_cards, new_opp_cards, new_my_cards, new_coins, new_history, new_reach_probabilities, opponent, new_deck, new_move_counter)
 
         # Value of the current game state is just counterfactual values weighted by action probabilities
         node_value = counterfactual_values.dot(strategy)
@@ -470,7 +484,8 @@ class CoupCFRTrainer():
         util = 0
         
         for i in range(num_iterations):
-            deck = ['CONTESSA'] * 3 + ['ASSASSIN'] * 3 +  ['DUKE'] * 3 +  ['CAPTAIN'] * 3
+
+            deck = ['CONTESSA'] * 3 + ['ASSASSIN'] * 3 +  ['DUKE'] * 3 +  ['CAPTAIN'] * 6
 
             my_cards = random.sample(deck, 2)
             for card in my_cards:
@@ -481,7 +496,14 @@ class CoupCFRTrainer():
                 deck.remove(card)
 
             reach_probabilities = np.ones(2)
-            util += self.cfr(my_cards, opp_cards, [2,2], [], reach_probabilities, 0, deck, 0)
+
+            initial_cards = sorted(my_cards[:]) + sorted(opp_cards[:])
+
+
+            print(initial_cards)
+
+
+            util += self.cfr(initial_cards, my_cards, opp_cards, [2,2], [], reach_probabilities, 0, deck, 0)
         return util
     
     def _get_possible_actions_from_tree(self, history):
@@ -590,12 +612,20 @@ if __name__ == "__main__":
     num_iterations = 1
     cfr_trainer = CoupCFRTrainer()
     print(f"\nRunning Coup chance sampling CFR for {num_iterations} iterations")
+
+
+
+    start_time = time.time()
     util = cfr_trainer.train(num_iterations)
-    print("Approx. EV as approaching NASH EQ:", util/num_iterations)
+    end_time = time.time()
 
+    print(f"Execution Time: {round(end_time - start_time, 2)} seconds.")
 
-    print(cfr_trainer.terminal_node_keys)
-    print(len(cfr_trainer.terminal_node_keys))
+    # print("Approx. EV as approaching NASH EQ:", util/num_iterations)
+
+    # for key in cfr_trainer.terminal_node_keys:
+    #     print(key)
+    # print(len(cfr_trainer.terminal_node_keys))
 
     # # For finding best response
     # ev_a = cfr_trainer.brf('CONTESSA', 0, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0.5, 'CONTESSA': 0}, 1)
