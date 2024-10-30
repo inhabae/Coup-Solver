@@ -1,36 +1,28 @@
 '''
 Kuhn Coup: 
-A variant of a popular board game Coup in the format of 1v1, 
-with the intent of solving a simpler version of Coup.
+A variant of a popular board game Coup I created in order to solve the simpler
+version of Coup before expanding it to the full game. Below is what is different from the real game.
 
 The deck consists of one Assassin, one Contessa, and one Civilian (who has no ability).
 
 Each player has one card and starts with one coin.
 
-Players on their turn can:
-    1) INCOME (gets one coin)
-    2) ASSASSINATE (takes up 1 coin)
-    3) COUP (takes up 2 coins)
+Income: +1 coin
+Assassinate: -1 coin (-3 coins in Coup)
+Coup: -2 coins (-7 coins in Coup)
 
-Players against an ASSASSINATION can:
-    1) CHALLENGE 
-    2) PASS 
-    3) BLOCK ASSASSINATION
-
-At three coins or more, player must Coup.
-Whoever eliminates the other player first wins.
+With 3 coins+, player must Coup.
 '''
 
-
-from enum import Enum
 import numpy as np
-from typing import List, Dict
+from enum import Enum
+from typing import List
 import random 
 import pickle 
+from itertools import permutations
 
 # Each action will be represented by an according integer.
-# For the readability of the code, the explicit name of the action is
-# used instead of an integer.
+# For the readability of the code, the explicit name of the action is used instead of an integer.
 class Action(Enum):
     INCOME = 0
     ASSASSINATE = 1
@@ -71,7 +63,6 @@ class InfoSet():
 
     def get_average_strategy(self) -> np.array:
         return self._normalize(self.strategy_sum.copy())
-    
 
 # KuhnCoup has methods for running the game:
 # 1. Determining if terminal node
@@ -134,8 +125,7 @@ class KuhnCoup():
                 possible_actions.remove(Action.PASS.value) 
             return possible_actions    
     
-
-# KuhnCFRTrainer is to find the Nash Eq strategies through CFR.
+# KuhnCFRTrainer finds the Nash Eq strategies through CFR.
 class KuhnCFRTrainer():
     def __init__(self):
         self.infoset_map = {}
@@ -143,12 +133,9 @@ class KuhnCFRTrainer():
 
     def get_information_set(self, my_card: str, history: str, possible_actions: List[int]) -> InfoSet:
         infoset_key = '' + my_card + ''.join([action for action in history])
-
         # Generate a new infoset key if it does not exist
         if infoset_key not in self.infoset_map:
-            # Create an infoset 
             self.infoset_map[infoset_key] = InfoSet(possible_actions)   
-
         return self.infoset_map[infoset_key]
     
     def cfr(self, cards: List[str], coins: List[int], history: str, reach_probabilities: np.array, active_player: int, first_assn_list: List[bool]):
@@ -158,24 +145,18 @@ class KuhnCFRTrainer():
         
         possible_actions = KuhnCoup.get_possible_actions(history, coins[active_player], first_assn_list[active_player])
         my_card = cards[active_player]
-
         infoset = self.get_information_set(my_card, history, possible_actions)
         strategy = infoset.get_strategy(reach_probabilities[active_player])
-
         opponent = 1 - active_player
-
         counterfactual_values = np.zeros(len(possible_actions))
-
         for ix, action in enumerate(possible_actions):
             action_probability = strategy[ix]
             new_reach_probabilities = reach_probabilities.copy()
             new_reach_probabilities[active_player] *= action_probability
-
             # Perform actions
             new_coins = coins[:]
             new_history = history
             new_first_assn_list = first_assn_list[:]
-
             if action == Action.INCOME.value:
                 new_coins[active_player] += 1
             elif action == Action.ASSASSINATE.value:
@@ -183,15 +164,11 @@ class KuhnCFRTrainer():
                 new_first_assn_list[active_player] = False
             elif action == Action.COUP.value:
                 new_coins[active_player] -= 2
-
             new_history += str(action)
-
-            # Recursively call cfr(), switching the player to act
             counterfactual_values[ix] = -self.cfr(cards, new_coins, new_history, new_reach_probabilities, opponent, new_first_assn_list)
 
         # Value of the current game state is just counterfactual values weighted by action probabilities
         node_value = counterfactual_values.dot(strategy)
-
         for ix, action in enumerate(possible_actions):
             regret =  (counterfactual_values[ix] - node_value)
             infoset.cumulative_regrets[ix] += reach_probabilities[opponent] * regret
@@ -208,6 +185,36 @@ class KuhnCFRTrainer():
             util += self.cfr(cards, coins, history, reach_probabilities, 0, [True, True])
         return util
     
+    def calculate_strategy_ev(self, p1_card, p2_card, history, node_probability):
+        if KuhnCoup.is_terminal(history):
+            last_action = int(history[-1])
+            if last_action == Action.COUP.value: 
+                return -1
+            elif last_action == Action.PASS.value: # Passing an assassination loses.
+                return 1
+            challenged_player = len(history) % 2
+            if challenged_player == 0:
+                if int(history[-2]) == Action.BLOCK_ASSASSINATE.value:
+                    return 1 if p1_card == 'CONTESSA' else -1
+                elif int(history[-2]) == Action.ASSASSINATE.value:
+                    return 1 if p1_card == 'ASSASSIN' else -1
+            elif challenged_player == 1:
+                if int(history[-2]) == Action.BLOCK_ASSASSINATE.value:
+                    return 1 if p2_card == 'CONTESSA' else -1
+                elif int(history[-2]) == Action.ASSASSINATE.value:
+                    return 1 if p2_card == 'ASSASSIN' else -1
+                
+        ev = 0
+        for action in self._get_possible_actions_from_tree(history):
+            card = p1_card
+            if len(history) % 2 == 1:
+                card = p2_card
+            action_index = self.infoset_map[card+history].action_names.index(int(action))
+            strategy = self.infoset_map[card + history].get_average_strategy()[action_index]
+            new_node_probability = node_probability * strategy
+            ev += -self.calculate_strategy_ev(p1_card, p2_card, history + action, new_node_probability) * new_node_probability
+        return ev
+    
     def _get_possible_actions_from_tree(self, history):
         all_keys = list(self.infoset_map.keys()) + list(self.terminal_node_keys)
         all_keys = list(set(key[8:] for key in all_keys))
@@ -217,15 +224,15 @@ class KuhnCFRTrainer():
                 possible_actions.append(key[-1])
         return list(set(possible_actions))
 
+    # https://aipokertutorial.com/agent-evaluation/ 
+    # Note 4.3 
     def brf(self, maximizing_player_card: str, maximizing_player: int, history, opp_reach, depth):
         if KuhnCoup.is_terminal(history):
             last_action = int(history[-1])
-
             if last_action == Action.COUP.value: 
                 return -1
             elif last_action == Action.PASS.value: # Passing an assassination is game-losing.
                 return 1
-
             # Challenging depends on opponent reach probability. 
             challenged_player = len(history) % 2
 
@@ -242,22 +249,10 @@ class KuhnCFRTrainer():
                 opp_normalized = dict()
                 for i in ['ASSASSIN', 'CIVILIAN', 'CONTESSA']: # opp reach of each card
                     opp_normalized[i] = opp_reach[i] / total_opp_reach
-
                 if int(history[-2]) == Action.BLOCK_ASSASSINATE.value:
                     return (2 * opp_normalized['CONTESSA'] - 1)
                 elif int(history[-2]) == Action.ASSASSINATE.value:
                     return (2 * opp_normalized['ASSASSIN'] - 1)
-        
-
-        # this is for AMBASSASDOR where chances are accounted in the game 
-        #elif history % 2 != current_player: # NOT current player's node (NOT his turn to act)
-            # pass
-            # get possible actions
-            # for each action, BRF recursively
-            # add EV and return that EV 
-
-        # else if node is PRIVATE CHANCE NODE of CURRENT PLAYER... 
-       
         new_opp_reach = opp_reach.copy()
         v = -2
         utils = {}
@@ -267,56 +262,66 @@ class KuhnCFRTrainer():
             # w is the total likelihood of opponent taking "action", considering
             # all three cards and its specific strategy with the "action"
             w[action] = 0
-
-        # line 17
         for action in self._get_possible_actions_from_tree(history):
-            
             if maximizing_player != len(history) % 2:
                 for card in ['ASSASSIN', 'CIVILIAN', 'CONTESSA']:
-
                     # NOTE: With a small number of iterations, it is possible to run into
                     # an unexplored node of the game tree.
-
                     action_index = self.infoset_map[card+history].action_names.index(int(action))
                     strategy = self.infoset_map[card + history].get_average_strategy()[action_index]
 
                     new_opp_reach[card] = opp_reach[card] * strategy
                     w[action] += new_opp_reach[card]
-                
-            # RECURSION
             utils[action] = -self.brf(maximizing_player_card, maximizing_player, history + action, new_opp_reach, depth+1)
-        
             if maximizing_player == len(history) % 2 and utils[action] > v:
                 v = utils[action]
-
         if maximizing_player != len(history) % 2:
             v = 0
             for action in self._get_possible_actions_from_tree(history):
                v += (w[action] / sum(w.values())) * utils[action]
         return v
+    
+    def calculate_exploitability(self):
+        # Payoff of P1 comparing p1 average strategy and p2 average strategy (as it converges to Nash)
+        p1_p2_payoff = 0
+        for cards in list(permutations(['ASSASSIN', 'CIVILIAN', 'CONTESSA'], 2)):
+            p1_p2_payoff += self.calculate_strategy_ev(cards[0], cards[1], '', 1) / 6
+
+        ev_1a = cfr_trainer.brf('CONTESSA', 0, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0.5, 'CONTESSA': 0}, 1)
+        ev_1b = cfr_trainer.brf('ASSASSIN', 0, '', {'ASSASSIN': 0, 'CIVILIAN': 0.5, 'CONTESSA': 0.5}, 1)
+        ev_1c = cfr_trainer.brf('CIVILIAN', 0, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0, 'CONTESSA': 0.5}, 1)
+        p2_payoff_vs_p1_br = -(ev_1a + ev_1b + ev_1c) / 3
+        ev_2a = -cfr_trainer.brf('CONTESSA', 1, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0.5, 'CONTESSA': 0}, 1)
+        ev_2b = -cfr_trainer.brf('ASSASSIN', 1, '', {'ASSASSIN': 0, 'CIVILIAN': 0.5, 'CONTESSA': 0.5}, 1)
+        ev_2c = -cfr_trainer.brf('CIVILIAN', 1, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0, 'CONTESSA': 0.5}, 1)
+        p1_payoff_vs_p2_br = -(ev_2a + ev_2b + ev_2c) / 3
+
+        # Exploitability:
+        exp = (p1_p2_payoff - p1_payoff_vs_p2_br) + (-p1_p2_payoff - p2_payoff_vs_p1_br)
+        return exp
 
 if __name__ == "__main__":
-    num_iterations = 100000
     cfr_trainer = KuhnCFRTrainer()
-    print(f"\nRunning Kuhn Coup chance sampling CFR for {num_iterations} iterations")
-    util = cfr_trainer.train(num_iterations)
-    print("Approx. EV as approaching NASH EQ:", util/num_iterations)
+    utils = 0
+    iters = 0
+    while True:
+        try:
+            target_exp = float(input("Target Exploitability (0 < exploitability < 1): "))
+            if target_exp >= 1 or target_exp <= 0:
+                raise ValueError
+            break
+        except ValueError:
+            print("Invalid input.\n")
 
-    # For finding best response
-    ev_a = cfr_trainer.brf('CONTESSA', 0, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0.5, 'CONTESSA': 0}, 1)
-    print(f'CONTESSA EV is {ev_a}')
-    ev_b = cfr_trainer.brf('ASSASSIN', 0, '', {'ASSASSIN': 0, 'CIVILIAN': 0.5, 'CONTESSA': 0.5}, 1)
-    print(f'ASSASSIN EV is {ev_b}')
-    ev_c = cfr_trainer.brf('CIVILIAN', 0, '', {'ASSASSIN': 0.5, 'CIVILIAN': 0, 'CONTESSA': 0.5}, 1)
-    print(f'CIVILIAN EV is {ev_c}')
+    exp = 1_000_000
+    while exp > target_exp:
+        utils += cfr_trainer.train(100_000)
+        iters += 100_000
 
-    total_ev = (ev_a + ev_b + ev_c) / 3
+        exp = cfr_trainer.calculate_exploitability()
+        print(f"Iter: {iters}: CURRENT EXPLOITABILITY: ", exp, "STRATEGY EV: ", utils/iters)
 
-    print("MES EV FOR P1 IS: ", total_ev)
-
-    # For storing solved data in a file
-    # key: history
-    # value: strategies for each card holding
+    # Storing the solutions in a pickle file
     solutions = dict()
     for infoset_key, infoset in cfr_trainer.infoset_map.items():
         card = infoset_key[:8]
@@ -330,6 +335,7 @@ if __name__ == "__main__":
         else:
             solutions[history] = [{card : d}]
 
-    with open('solutions-2024-09-19-run1.pkl', 'wb') as f:
-        pickle.dump(solutions, f)
+    file_name = input("Name of the file for the solutions: ")
 
+    with open(f'{file_name}.pkl', 'wb') as f:
+        pickle.dump(solutions, f)
