@@ -1,5 +1,5 @@
-#ifndef COUP_VARIANT_A_STATE_HPP
-#define COUP_VARIANT_A_STATE_HPP
+#ifndef COUP_VARIANT_B_STATE_HPP
+#define COUP_VARIANT_B_STATE_HPP
 
 #include <memory>
 #include <sstream>
@@ -18,12 +18,12 @@ enum Action {
   CHALLENGE,
   PASS_BLOCK,
   LOSE_CARD,
-  SHOW_CARD,
+  SHOW_CARD
 };
 
-enum Card { INVALID_CARD, ASSASSIN, CONTESSA, DUKE };
+enum Card { INVALID_CARD, ASSASSIN, CONTESSA, DUKE};
 
-class CoupVariantAState {
+class CoupVariantBState {
 public:
   Player current_player;
   Card player1_card;
@@ -34,15 +34,14 @@ public:
   bool did_assassinate_p2;
   std::vector<Action> action_history;
 
-  CoupVariantAState();
+  CoupVariantBState();
   bool is_terminal() const;
   bool is_chance_node() const;
   std::vector<double> get_utilities() const;
   Player get_current_player() const;
   std::vector<Action> get_legal_actions() const;
-  std::unique_ptr<CoupVariantAState> get_child(Action action) const;
+  std::unique_ptr<CoupVariantBState> get_child(Action action) const;
   std::string get_information_set_key() const;
-  std::string get_history_key() const;
 };
 
-#endif // COUP_VARIANT_A_STATE_HPP
+#endif // COUP_VARIANT_B_STATE_HPP
