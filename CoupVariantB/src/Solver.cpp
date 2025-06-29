@@ -107,9 +107,11 @@ private:
     std::unordered_map<std::string, size_t> key2hash;
     std::unordered_map<size_t, std::vector<CoupVariantBState>> iset_states;
     std::unordered_map<size_t, double> opp_reach;
+    std::unordered_map<std::string, double> opp_reach_i;
     std::unordered_map<size_t, Action> br_strategy;
     std::unordered_map<size_t,double> br_value;
     std::unordered_set<size_t> visited;
+    std::unordered_map<size_t, std::vector<double>> opp_card_dist;
     int num_players = 2;
     int delay;
 
@@ -275,8 +277,13 @@ public:
         for (int player = 0; player < num_players; ++player) {
             // clear best-response data
             br_strategy.clear(); visited.clear(); iset_states.clear(); opp_reach.clear(); br_value.clear();
-            // build tree for best response
-            build_infosets_and_reach(root, player, hash_strat_map, 1.0);
+
+            if (player == 0) {
+                for (auto& kv : opp_reach_i) {
+                    std::cout << kv.first << ": " << kv.second << std::endl;
+                }
+            }
+
             double best_val = calculate_best_response(root, player, hash_strat_map);
             std::cout << "Player" << player + 1 << std::endl;
             std::cout << "\tBR EV: " << best_val << std::endl;
@@ -291,159 +298,137 @@ public:
         return total;
     }
 
-    // Build infosets and reach probabilities for best response
-    void build_infosets_and_reach(
-        const CoupVariantBState& state,
-        Player br,
-        const std::unordered_map<size_t, std::unordered_map<Action,double>>& opp_strat,
-        double r) {
-        if (state.is_chance_node()) {
-            std::cout << "AT CHANCE NODE" << std::endl;
-            std::vector<Card> C{ASSASSIN, CONTESSA, DUKE};
-            for (auto c1 : C) for (auto c2 : C) {
-                CoupVariantBState ch = state;
-                ch.player1_card = c1;
-                ch.player2_card = c2;
-                ch.action_history.push_back(GAME_START);
-                double init_prob = (c1 == c2) ? 2.0/30.0 : 4.0/30.0;
-                build_infosets_and_reach(ch, br, opp_strat, r * init_prob);
-            }
-            return;
-        }
 
-        size_t I = get_information_set_hash(state);
-        iset_states[I].push_back(state);
-        size_t H = get_history_hash(state);
-        opp_reach[H] = r;
-
-        if (state.is_terminal()) return;
-        Player cur = state.get_current_player();
-        auto actions = state.get_legal_actions();
-        if (cur == br) {
-            for (auto a : actions) {
-                auto child_ptr = state.get_child(a);
-                auto& ch = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
-                build_infosets_and_reach(ch, br, opp_strat, r);
-            }
-        } else {
-            auto it = opp_strat.find(I);
-            for (auto a : actions) {
-                double p;
-                if (it != opp_strat.end()) {
-                    p = it->second.at(a);
-                } else {
-                    std::cerr << "DEBUGGING: p = 0";
-                    p = 1.0/actions.size();
-                }
-                auto child_ptr = state.get_child(a);
-                auto& ch = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
-                build_infosets_and_reach(ch, br, opp_strat, r * p);
-            }
-        }
+    // Calculate best response EV for the maximizing player
+double calculate_best_response(
+    const CoupVariantBState& state, 
+    Player maximizing_player,
+    const std::unordered_map<size_t, std::unordered_map<Action,double>>& hash_strat_map) {
+    
+    if (state.is_terminal()) {
+        auto utilities = state.get_utilities();
+        return utilities[maximizing_player];
     }
-
-    // Recursive best response (fixed)
-    double calculate_best_response(
-        const CoupVariantBState& state,
-        Player br,
-        const std::unordered_map<size_t, std::unordered_map<Action,double>>& opp_strat) {
-        // Terminal node
-        if (state.is_terminal()) {
-            if (state.current_player == br) { // maximizing player challenged, proceed normally
-                return state.get_utilities()[br];
+    
+    if (state.is_chance_node()) {
+        double expected_value = 0.0;
+        std::vector<Card> cards{ASSASSIN, CONTESSA, DUKE};
+        
+        for (auto c1 : cards) {
+            for (auto c2 : cards) {
+                CoupVariantBState child = state;
+                child.player1_card = c1;
+                child.player2_card = c2;
+                child.action_history.push_back(GAME_START);
+                
+                double prob = (c1 == c2) ? 2.0 / 30.0 : 4.0 / 30.0;
+                double child_value = calculate_best_response(child, maximizing_player, hash_strat_map);
+                expected_value += prob * child_value;
             }
-            size_t idx = -1;
-            auto it = std::find(state.action_history.begin(), state.action_history.end(), CHALLENGE);
-            if (it != state.action_history.end()) {
-                idx = std::distance(state.action_history.begin(), it);
-            } else {
-                return state.get_utilities()[br]; // terminal node after COUP
+        }
+        return expected_value;
+    }
+    
+    Player current_player = state.get_current_player();
+    auto legal_actions = state.get_legal_actions();
+    
+    if (current_player == maximizing_player) {
+        // For maximizing player: find best action for this information set
+        size_t iset_hash = get_information_set_hash(state);
+        
+        // Check if we've already computed best action for this information set
+        auto br_it = br_strategy.find(iset_hash);
+        if (br_it != br_strategy.end()) {
+            Action best_action = br_it->second;
+            auto child_ptr = state.get_child(best_action);
+            auto& child = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
+            return calculate_best_response(child, maximizing_player, hash_strat_map);
+        }
+        
+        // Compute best action by evaluating each action's expected value
+        // across all possible states in this information set
+        double best_value = -std::numeric_limits<double>::infinity();
+        Action best_action = legal_actions[0];
+        
+        for (auto action : legal_actions) {
+            double action_value = 0.0;
+            
+            // We need to compute expected value of this action across all possible
+            // opponent private information (since this is what determines the information set)
+            std::vector<Card> opp_cards{ASSASSIN, CONTESSA, DUKE};
+            int count = 0;
+            
+            for (auto opp_card : opp_cards) {
+                // Create a state with this opponent card configuration
+                CoupVariantBState test_state = state;
+                if (maximizing_player == 0) {
+                    test_state.player2_card = opp_card;
+                } else {
+                    test_state.player1_card = opp_card;
+                }
+                
+                // Verify this state has the same information set
+                if (get_information_set_hash(test_state) == iset_hash) {
+                    auto child_ptr = test_state.get_child(action);
+                    auto& child = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
+                    action_value += calculate_best_response(child, maximizing_player, hash_strat_map);
+                    count++;
+                }
             }
             
-            Action challenged_action = state.action_history[idx - 1];
-            Card challenged_card = INVALID_CARD;
-            if (challenged_action == ASSASSINATE) challenged_card = ASSASSIN;
-            if (challenged_action == BLOCK_ASSASSINATE) challenged_card = CONTESSA;
-            if (challenged_action == TAX) challenged_card = DUKE;
-
-            double card_prob_sum = 0.0;
-            double target_reach = 0.0;
-            for (const auto &hist_state : iset_states[get_information_set_hash(state)]) {
-                card_prob_sum += opp_reach[get_history_hash(hist_state)];
+            if (count > 0) {
+                action_value /= count;  // Average over possible opponent cards
+            } else {
+                // Fallback: just use current state
+                auto child_ptr = state.get_child(action);
+                auto& child = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
+                action_value = calculate_best_response(child, maximizing_player, hash_strat_map);
             }
-
-            for (const auto &hist_state : iset_states[get_information_set_hash(state)]) {
-                if (br == 0 && hist_state.player1_card == challenged_card) {
-                    target_reach = opp_reach[get_history_hash(hist_state)] / card_prob_sum;
-                    if (card_prob_sum == 0) return -1.0;
-                    break;
-                }
-                if (br == 1 && hist_state.player2_card == challenged_card) {
-                    target_reach = opp_reach[get_history_hash(hist_state)] / card_prob_sum;
-                    if (card_prob_sum == 0) return -1.0;
-                    break;
-                }
+            
+            if (action_value > best_value) {
+                best_value = action_value;
+                best_action = action;
             }
-
-            return 1 - target_reach;
         }
-        // Chance node
-        if (state.is_chance_node()) {
-            double exp_u = 0.0;
-            std::vector<Card> cards = {ASSASSIN, CONTESSA, DUKE};
-            for (auto c1 : cards) for (auto c2 : cards) {
-                    CoupVariantBState child = state;
-                    child.player1_card = c1;
-                    child.player2_card = c2;
-                    child.action_history.push_back(GAME_START);
-                    double init_prob = (c1 == c2) ? 2.0 / 30.0 : 4.0 / 30.0;
-                    double val = calculate_best_response(child, br, opp_strat);
-                    exp_u += init_prob * val;
-
-                    std::cout << "P1 Card: " << c1 << " P2 Card: " << c2 << std::endl
-                              << "BR_PLAYER EV: " << val << std::endl;
-                }
-
-            return exp_u;
-        }
-        // Decision node
-        Player cur = state.get_current_player();
-        size_t I = get_information_set_hash(state);
-        auto actions = state.get_legal_actions();
-        // Our node: pick one action per infoset
-        if (cur == br) {
-            double best_val = -2;
-            std::unordered_map<Action,double> EV; 
-            for (auto a : actions) EV[a] = 0.0;
-            for (Action a : actions) {
-                auto child_ptr = state.get_child(a);
-                auto &child = *dynamic_cast<const CoupVariantBState *>(child_ptr.get());
-                double action_val = calculate_best_response(child, br, opp_strat);
-                best_val = std::max(best_val, action_val);
-            }
-            return best_val;
+        
+        // Store best action for this information set
+        br_strategy[iset_hash] = best_action;
+        
+        // Return value for the current state using best action
+        auto child_ptr = state.get_child(best_action);
+        auto& child = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
+        return calculate_best_response(child, maximizing_player, hash_strat_map);
+        
+    } else {
+        // Opponent plays according to their strategy
+        size_t iset_hash = get_information_set_hash(state);
+        
+        std::unordered_map<Action, double> strategy;
+        auto strat_it = hash_strat_map.find(iset_hash);
+        if (strat_it != hash_strat_map.end()) {
+            strategy = strat_it->second;
         } else {
-            // Opponent node: fold in their σ
-            double exp_u = 0.0;
-            std::unordered_map<Action,double> o;
-            auto it = opp_strat.find(I);
-            if (it != opp_strat.end()) o = it->second;
-            else {
-                double uniform = 1.0 / actions.size();
-                for (auto a : actions) o[a] = uniform;
+            // Default to uniform strategy
+            double uniform_prob = 1.0 / legal_actions.size();
+            for (auto action : legal_actions) {
+                strategy[action] = uniform_prob;
             }
-            for (auto a : actions) {
-                double p = o[a];
-                auto child_ptr = state.get_child(a);
-                auto &child = *dynamic_cast<const CoupVariantBState *>(child_ptr.get());
-                double opp_val = calculate_best_response(child, br, opp_strat);
-                exp_u += p * opp_val;
-
-            }
-            return exp_u;
         }
-        std::exit(1);
+        
+        double expected_value = 0.0;
+        for (auto action : legal_actions) {
+            auto child_ptr = state.get_child(action);
+            auto& child = *dynamic_cast<const CoupVariantBState*>(child_ptr.get());
+            double child_value = calculate_best_response(child, maximizing_player, hash_strat_map);
+            
+            auto prob_it = strategy.find(action);
+            double prob = (prob_it != strategy.end()) ? prob_it->second : 0.0;
+            expected_value += prob * child_value;
+        }
+        
+        return expected_value;
     }
+}
 
     // Train with exploitability tracking
     void train_with_exploitability_tracking(
@@ -524,7 +509,7 @@ int main() {
     CoupVariantBState root;
     CFRPlusSolver solver(100);
     solver.initialize(root);
-    solver.train_with_exploitability_tracking(root, 1000, 1000, 0.01);
+    solver.train_with_exploitability_tracking(root, 10000, 1000, -1);
     auto strat = solver.get_all_strategies();
     // e.g., save for later
     solver.save_strategies_binary("strategies.bin");
