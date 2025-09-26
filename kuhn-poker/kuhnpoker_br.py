@@ -165,7 +165,7 @@ def get_utility_br(my_card, opp_cards, history, card_distribution):
             if player != 1: utility *= -1
             return utility
 
-def calculate_p2_br(p2_card, p1_cards, history, reach_prob, card_distribution):
+def calculate_p2_br(p2_card, p1_cards, history, card_distribution):
     if is_terminal(history):
         u = get_utility_br(p2_card, p1_cards, history, card_distribution)
         return u
@@ -175,7 +175,7 @@ def calculate_p2_br(p2_card, p1_cards, history, reach_prob, card_distribution):
         best_action = -1
         for a in range(NUM_ACTIONS):
             next_history = history + ("p" if a == 0 else "b")
-            utility = -calculate_p2_br(p2_card, p1_cards, next_history, reach_prob, card_distribution)
+            utility = -calculate_p2_br(p2_card, p1_cards, next_history, card_distribution)
             if utility > best_value:
                 best_value = utility
                 best_action = a
@@ -193,33 +193,32 @@ def calculate_p2_br(p2_card, p1_cards, history, reach_prob, card_distribution):
         node_utility = 0.0
         for a in range(NUM_ACTIONS):
             next_history = history + ("p" if a == 0 else "b")
-            action_utility = -calculate_p2_br(p2_card, p1_cards, next_history, action_probs[a], new_card_distribution[a])
+            action_utility = -calculate_p2_br(p2_card, p1_cards, next_history, new_card_distribution[a])
             node_utility += action_utility * action_probs[a]
         return node_utility
     
 def main():
     initialize_infosets()
-    # iterations = 1_000_00
-    # utility = train(iterations)
+    iterations = 1_000_00
+    train(iterations)
 
     ### CUSTOM STRATEGY
     global node_map
-
-    ### P1
-    node_map["1"].strategy_sum = [1/3, 2/3]
-    node_map["1"].strategy_sum = [2/3, 1/3]
-    node_map["1pb"].strategy_sum = [1.0, 0.0]
-    node_map["2"].strategy_sum = [1.0, 0.0]
-    node_map["2pb"].strategy_sum = [1/3, 2/3]
-    node_map["3"].strategy_sum = [0.0, 1.0]
-    node_map["3pb"].strategy_sum = [0.0, 1.0]
+    
+    # node_map["1"].strategy_sum = [1/3, 2/3]
+    # node_map["1"].strategy_sum = [2/3, 1/3]
+    # node_map["1pb"].strategy_sum = [1.0, 0.0]
+    # node_map["2"].strategy_sum = [1.0, 0.0]
+    # node_map["2pb"].strategy_sum = [1/3, 2/3]
+    # node_map["3"].strategy_sum = [0.0, 1.0]
+    # node_map["3pb"].strategy_sum = [0.0, 1.0]
 
 
     br_utility = 0.0
     for c in [1,2,3]:
         opp_cards = [1,2,3]
         opp_cards.remove(c)
-        card_utility = calculate_p2_br(c, opp_cards, "", 1.0, [0.5, 0.5])
+        card_utility = calculate_p2_br(c, opp_cards, "", [0.5, 0.5])
         print(f"Card {c}: Utility: {card_utility}")
         br_utility += card_utility
     
