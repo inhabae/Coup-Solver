@@ -189,7 +189,7 @@ def calculate_p2_br(p2_card, p1_cards, history, card_distribution):
                 v = infoset_node.get_average_strategy()[a] * card_distribution[c]
                 action_probs[a] += v
                 new_card_distribution[a].append(v)
-    
+
         node_utility = 0.0
         for a in range(NUM_ACTIONS):
             next_history = history + ("p" if a == 0 else "b")
@@ -199,12 +199,12 @@ def calculate_p2_br(p2_card, p1_cards, history, card_distribution):
     
 def main():
     initialize_infosets()
-    iterations = 1_000_00
+    iterations = 1_000_000
     train(iterations)
 
     ### CUSTOM STRATEGY
     global node_map
-    
+
     # node_map["1"].strategy_sum = [1/3, 2/3]
     # node_map["1"].strategy_sum = [2/3, 1/3]
     # node_map["1pb"].strategy_sum = [1.0, 0.0]

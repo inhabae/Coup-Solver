@@ -1,34 +1,14 @@
-CC = g++
-CFLAGS = -Wall -g -std=c++17 -Wextra -O2
-LDFLAGS = 
-SRCDIR = src
+CXX = g++
+CXXFLAGS = -Wall -O2 -std=c++14
 
-# Object files for each executable
-SOLVER_OBJS = Solver.o CoupVariantAState.o
-VIEWER_OBJS = Viewer.o
+solver: game_state.o solver.o
+	$(CXX) $(CXXFLAGS) -o solver game_state.o solver.o
 
-# Default target
-all: solver viewer
+game_state.o: game_state.cpp game_state.hpp
+	$(CXX) $(CXXFLAGS) -c game_state.cpp
 
-# solver executable
-solver: $(SOLVER_OBJS)
-	$(CC) $(SOLVER_OBJS) -o solver $(LDFLAGS)
+solver.o: solver.cpp game_state.hpp
+	$(CXX) $(CXXFLAGS) -c solver.cpp
 
-# viewer executable
-viewer: $(VIEWER_OBJS)
-	$(CC) $(VIEWER_OBJS) -o viewer $(LDFLAGS)
-
-Solver.o: $(SRCDIR)/Solver.cpp $(SRCDIR)/CoupVariantAState.hpp
-	$(CC) $(CFLAGS) -c $(SRCDIR)/Solver.cpp
-
-CoupVariantAState.o: $(SRCDIR)/CoupVariantAState.cpp $(SRCDIR)/CoupVariantAState.hpp
-	$(CC) $(CFLAGS) -c $(SRCDIR)/CoupVariantAState.cpp
-
-Viewer.o: $(SRCDIR)/Viewer.cpp
-	$(CC) $(CFLAGS) -c $(SRCDIR)/Viewer.cpp
-
-# Clean up
 clean:
-	rm -f *.o solver viewer
-
-.PHONY: all clean
+	rm -f *.o solver
