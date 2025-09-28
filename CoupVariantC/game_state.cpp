@@ -22,6 +22,17 @@ void GameState::set_cards(Card card1, Card card2) {
     p2_card = card2;
 }
 
+// For best response function
+void GameState::set_my_card(Card card) {
+    if (current_player == 0) p1_card = card;
+    else p2_card = card;
+}
+
+// // For best response function
+// Action GameState::get_last_action() const {
+//     return history.back();
+// }
+
 double GameState::get_utility() const {
     Action last_action = history.back();
     // Coup
@@ -45,6 +56,52 @@ double GameState::get_utility() const {
         return has_correct_card ? 1.0 : -1.0;
     }
     assert(false && "get_utility() called on non-terminal state");
+}
+   
+double GameState::get_br_utility(int maximizing_player, std::vector<double> card_distribution) const {
+    Action last_action = history.back();
+    // Coup
+    if (last_action == COUP) return -1.0;
+    // Maximizing Player is challenged -> Check card 
+    if (maximizing_player == current_player) {
+        Action challenged_action = history[history.size() - 2];
+        Card current_card = (current_player == 0) ? p1_card : p2_card;
+
+        bool has_correct_card = false;
+        if (challenged_action == TAX && current_card == DUKE) {
+            has_correct_card = true;
+        }
+        else if (challenged_action == ASSASSINATE && current_card == ASSASSIN) {
+            has_correct_card = true;
+        }
+        else if (challenged_action == BLOCK_ASSASSINATE && current_card == CONTESSA) {
+            has_correct_card = true;
+        }
+        return has_correct_card ? 1.0 : -1.0;
+    }
+    // Non-Maximizing Player is challenged -> Consider distribution
+    else {
+        // Find challenged action
+        Action challenged_action = history[history.size() - 2];
+
+        Card challenged_card = ASSASSIN;
+        if (challenged_action == BLOCK_ASSASSINATE) challenged_card = CONTESSA;
+        if (challenged_action == TAX) challenged_card = DUKE;
+
+        std::vector<Card> cards {ASSASSIN, CONTESSA, DUKE};
+
+        // Calculate utility based on the distribution
+        double utility = 0.0;
+        for (int c = 0; c < card_distribution.size(); c++)
+            if (challenged_card == cards[c]) {
+                utility += card_distribution[c] * 1.0;
+            }
+            else {
+                utility -= card_distribution[c] * 1.0;
+            } 
+        return utility;
+    }
+    assert(false && "get_br_utility() called on non-terminal state");
 }
 
 int GameState::get_current_player() const {

@@ -30,8 +30,10 @@ public:
     GameState();
     bool is_terminal() const;
     double get_utility() const;
+    double get_br_utility(int, std::vector<double>) const;
     int get_current_player() const;
     void set_cards(Card, Card);
+    void set_my_card(Card);
     std::vector<Action> get_legal_actions() const;
     void apply_action(Action);
     void undo_action();

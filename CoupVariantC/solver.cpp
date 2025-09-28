@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <random>
 #include <algorithm>
+#include <cassert>
 
 
 class Solver {
@@ -12,6 +13,8 @@ public:
     std::unordered_map<size_t, std::vector<double>> strategy_sum;
     std::unordered_map<size_t, std::vector<Action>> next_actions;
     std::unordered_map<size_t, std::string> hash_to_string;
+    
+    double current_utility = 0.0;
 
     Solver() {}
 
@@ -70,13 +73,21 @@ public:
         std::vector<Action> actions = g.get_legal_actions();
         
         size_t infoset = g.get_hash();
+
+        // Check for hash collision
+        std::string infoset_string = g.get_infoset_string();
+        if (hash_to_string.find(infoset) != hash_to_string.end()) {
+            if (hash_to_string[infoset] != infoset_string) {
+                assert(false && "Hash collision detected");
+            }
+        }
         
         // Lazy initialization
         if (regret_sum.find(infoset) == regret_sum.end()) {
             regret_sum[infoset] = std::vector<double>(actions.size(), 0.0);
             strategy_sum[infoset] = std::vector<double>(actions.size(), 0.0);
             next_actions[infoset] = actions;
-            hash_to_string[infoset] = g.get_infoset_string();
+            hash_to_string[infoset] = infoset_string;
         }
         
         std::vector<double> strategy = get_strategy(infoset);
@@ -108,6 +119,71 @@ public:
         return node_utility;
     }
 
+    double calculate_best_response(GameState& g, const int max_player, const std::vector<Card> opp_cards, std::vector<double> card_distribution) {
+        if (g.is_terminal()) {
+            return g.get_br_utility(max_player, card_distribution);
+        }
+
+        std::vector<Action> next_actions = g.get_legal_actions();
+
+        if (g.get_current_player() == max_player) {
+            double best_value = -100.0;
+            Action best_action = ASSASSINATE;
+
+            for (int a = 0; a < next_actions.size(); a++) {
+                g.apply_action(next_actions[a]);
+                double action_utility = -calculate_best_response(g, max_player, opp_cards, card_distribution);
+                g.undo_action();
+                if (action_utility > best_value) {
+                    best_value = action_utility;
+                    best_action = next_actions[a];
+                }
+            }
+            // Print best action
+            // std::cout << "Player " << max_player + 1 << ": History: ";
+            // for (Action a : g.history) {
+            //     std::cout << a << " ";
+            // }
+            // std::cout << "Best action: " << best_action << std::endl;
+            return best_value;
+        }
+        else {
+            std::vector<double> action_probs(next_actions.size(), 0.0);
+            std::vector<std::vector<double>> new_card_distribution(next_actions.size());
+            
+            for (int a = 0; a < next_actions.size(); a++) {
+                new_card_distribution[a].resize(opp_cards.size());
+                for (int c = 0; c < opp_cards.size(); c++) {
+                    g.set_my_card(opp_cards[c]);
+                    size_t infoset = g.get_hash();
+                    std::vector<double> avg_strategy = get_average_strategy(infoset);
+                    double v = avg_strategy[a] * card_distribution[c]; 
+                    action_probs[a] += v;
+                    new_card_distribution[a][c] = v;
+                }
+            }
+            
+            double node_utility = 0.0;
+            for (int a = 0; a < next_actions.size(); a++) {
+                g.apply_action(next_actions[a]);
+
+                // Normalize new card distribution
+                std::vector<double> normalized_card_dist = new_card_distribution[a];
+                if (action_probs[a] > 0) {
+                    for (double& p : normalized_card_dist) {
+                        p /= action_probs[a];
+                    }
+                }
+
+                double action_utility = -calculate_best_response(g, max_player, opp_cards, normalized_card_dist);
+                g.undo_action();
+                node_utility += action_utility * action_probs[a];
+            }
+            return node_utility;
+        }
+        assert(false);
+    }
+
     void train(int iterations) {
         std::vector<Card> card_pool = {ASSASSIN, ASSASSIN, DUKE, DUKE, CONTESSA, CONTESSA};
         std::random_device rd;
@@ -125,6 +201,7 @@ public:
             util += cfr(g, 1.0, 1.0);
         }
         
+        current_utility = util / iterations;
         std::cout << "Average game value: " << util / iterations << std::endl;
         
         // Print strategies sorted by infoset string length
@@ -155,10 +232,41 @@ public:
         //     std::cout << std::endl;
         // }
     }
+
+    void calculate_exploitability() {
+        // For each card
+        double p1_br_utility = 0.0;
+        double p2_br_utility = 0.0;
+        std::vector<double> card_distribution = {};
+        std::vector<Card> cards = {ASSASSIN, CONTESSA, DUKE};
+        for (int c = 0; c < cards.size(); c++) {
+            for (int p = 0; p < 2; p++) {
+                GameState g;
+                g.set_cards(cards[c], cards[c]);
+                card_distribution.assign(cards.size(), 0.4);
+                card_distribution[c] = 0.2;
+                
+                if (p == 0) {
+                    p1_br_utility += calculate_best_response(g, p, cards, card_distribution) / 3;
+                } else {
+                    p2_br_utility += -1 * calculate_best_response(g, p, cards, card_distribution) / 3;
+                }
+            }
+        }
+        std::cout << "P1 BR EV: " << p1_br_utility << std::endl;
+        std::cout << "P2 BR EV: " << p2_br_utility << std::endl;
+
+
+        double p1_exploitability = (p1_br_utility - current_utility);
+        double p2_exploitability = (p2_br_utility + current_utility);
+        std::cout << "P1 exploitability: " << p1_exploitability << std::endl;
+        std::cout << "P2 exploitability: " << p2_exploitability << std::endl;
+    }
 };
 
 int main() {
     Solver solver = Solver();
     solver.train(1000000);
+    solver.calculate_exploitability();
     return 0;
 }
