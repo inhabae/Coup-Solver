@@ -1,6 +1,8 @@
 #ifndef GAME_STATE_HPP
 #define GAME_STATE_HPP
 
+#include <cstddef>
+#include <string>
 #include <vector>
 
 enum Action {

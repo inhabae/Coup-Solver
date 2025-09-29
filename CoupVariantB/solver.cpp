@@ -22,18 +22,18 @@ public:
         const std::vector<double>& regrets = regret_sum[infoset];
         std::vector<double> strategy_vec(regrets.size(), 0.0);
         double regret_total = 0.0;
-        for (int i = 0; i < regrets.size(); i++) {
+        for (size_t i = 0; i < regrets.size(); i++) {
             if (regrets[i] > 0) {
                 regret_total += regrets[i];
             }
         }
         if (regret_total > 0) {
-            for (int i = 0; i < regrets.size(); i++) {
+            for (size_t i = 0; i < regrets.size(); i++) {
                 strategy_vec[i] = std::max(0.0, regrets[i]) / regret_total;
             }
         } else {
             // Uniform strategy
-            for (int i = 0; i < regrets.size(); i++) {
+            for (size_t i = 0; i < regrets.size(); i++) {
                 strategy_vec[i] = 1.0 / regrets.size();
             }
         }
@@ -51,12 +51,12 @@ public:
         
         // Normalize
         if (sum > 0) {
-            for (int i = 0; i < avg_strategy.size(); i++) {
+            for (size_t i = 0; i < avg_strategy.size(); i++) {
                 avg_strategy[i] /= sum;
             }
         } else {
             // Uniform if no strategy recorded
-            for (int i = 0; i < avg_strategy.size(); i++) {
+            for (size_t i = 0; i < avg_strategy.size(); i++) {
                 avg_strategy[i] = 1.0 / avg_strategy.size();
             }
         }
@@ -95,7 +95,7 @@ public:
         double node_utility = 0.0;
         
         // Recurse for each action
-        for (int i = 0; i < actions.size(); i++) {
+        for (size_t i = 0; i < actions.size(); i++) {
             g.apply_action(actions[i]);
             
             double new_p1_reach = (player == 0) ? p1_reach * strategy[i] : p1_reach;
@@ -110,7 +110,7 @@ public:
         
         // Update regrets
         double reach_prob = (player == 0) ? p2_reach : p1_reach;
-        for (int i = 0; i < actions.size(); i++) {
+        for (size_t i = 0; i < actions.size(); i++) {
             double regret = action_utilities[i] - node_utility;
             regret_sum[infoset][i] += reach_prob * regret;
             strategy_sum[infoset][i] += ((player == 0) ? p1_reach : p2_reach) * strategy[i];
@@ -129,7 +129,7 @@ public:
         if (g.get_current_player() == max_player) {
             double best_value = -100.0;
             // Action best_action = ASSASSINATE;
-            for (int a = 0; a < next_actions.size(); a++) {
+            for (size_t a = 0; a < next_actions.size(); a++) {
                 g.apply_action(next_actions[a]);
                 double action_utility = -calculate_best_response(g, max_player, opp_cards, card_distribution);
                 g.undo_action();
@@ -149,9 +149,9 @@ public:
         else {
             std::vector<double> action_probs(next_actions.size(), 0.0);
             std::vector<std::vector<double>> new_card_distribution(next_actions.size());
-            for (int a = 0; a < next_actions.size(); a++) {
+            for (size_t a = 0; a < next_actions.size(); a++) {
                 new_card_distribution[a].resize(opp_cards.size());
-                for (int c = 0; c < opp_cards.size(); c++) {
+                for (size_t c = 0; c < opp_cards.size(); c++) {
                     g.set_my_card(opp_cards[c]);
                     size_t infoset = g.get_hash();
                     std::vector<double> avg_strategy = get_average_strategy(infoset);
@@ -162,7 +162,7 @@ public:
             }
             
             double node_utility = 0.0;
-            for (int a = 0; a < next_actions.size(); a++) {
+            for (size_t a = 0; a < next_actions.size(); a++) {
                 g.apply_action(next_actions[a]);
 
                 // Normalize new card distribution
@@ -182,7 +182,7 @@ public:
         assert(false);
     }
 
-    void train(int iterations) {
+    void train(size_t iterations) {
         std::vector<Card> card_pool = {
             ASSASSIN, ASSASSIN, 
             CAPTAIN, CAPTAIN, CAPTAIN, CAPTAIN, 
@@ -193,7 +193,7 @@ public:
         std::mt19937 gen(rd());
         double util = 0.0;
         
-        for (int i = 0; i < iterations; i++) {
+        for (size_t i = 0; i < iterations; i++) {
             // Shuffle card pool
             std::shuffle(card_pool.begin(), card_pool.end(), gen);
             
@@ -202,6 +202,13 @@ public:
             g.set_cards(card_pool[0], card_pool[1]);
             
             util += cfr(g, 1.0, 1.0);
+
+            if (i % 100000 == 0 && i != 0) {
+                current_utility = util / i;
+                std::cout << "Iteration #: " << i << " EV: " << util / i << std::endl;
+                calculate_exploitability();
+            }
+
         }
         
         current_utility = util / iterations;
@@ -214,10 +221,10 @@ public:
         double p2_br_utility = 0.0;
         std::vector<Card> cards = {ASSASSIN, CAPTAIN, CONTESSA, DUKE};
         std::vector<int> card_nums = {2, 4, 2, 2}; // 2 Assassins, 4 Captains, 2 Contesssas, 2 Dukes
-        for (int c = 0; c < cards.size(); c++) {
+        for (size_t c = 0; c < cards.size(); c++) {
             std::vector<double> card_distribution;
             // Calculate card distribution
-            for (int i = 0; i < cards.size(); i++) {
+            for (size_t i = 0; i < cards.size(); i++) {
                 int card_num = card_nums[i];
                 if (i == c) card_num -= 1;
                 card_distribution.push_back(card_num / 9.0);
@@ -250,6 +257,5 @@ public:
 int main() {
     Solver solver = Solver();
     solver.train(10000000);
-    solver.calculate_exploitability();
     return 0;
 }

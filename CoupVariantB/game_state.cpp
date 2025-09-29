@@ -102,7 +102,7 @@ double GameState::get_br_utility(int maximizing_player, std::vector<double> card
 
         // Calculate utility based on the distribution
         double utility = 0.0;
-        for (int c = 0; c < card_distribution.size(); c++)
+        for (size_t c = 0; c < card_distribution.size(); c++)
             if (challenged_card == cards[c]) {
                 utility += card_distribution[c] * 1.0;
             }
@@ -259,7 +259,7 @@ std::string GameState::get_infoset_string() const {
     else if (current_card == DUKE) infoset_str += "DUKE: ";
     
     // Add action history
-    for (int i = 0; i < history.size(); i++) {
+    for (size_t i = 0; i < history.size(); i++) {
         if (i > 0) infoset_str += ", ";
         
         Action action = history[i];
