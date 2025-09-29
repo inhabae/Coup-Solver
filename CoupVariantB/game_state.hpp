@@ -6,14 +6,18 @@
 enum Action {
   INCOME,
   TAX,
+  STEAL1,
+  STEAL2,
   ASSASSINATE,
   COUP,
+  BLOCK_STEAL1,
+  BLOCK_STEAL2,
   BLOCK_ASSASSINATE,
   CHALLENGE,
   PASS_BLOCK,
 };
 
-enum Card {ASSASSIN, CONTESSA, DUKE};
+enum Card {ASSASSIN, CAPTAIN, CONTESSA, DUKE};
 
 class GameState {
 public:
@@ -24,6 +28,10 @@ public:
     int p2_coins;
     bool p1_did_assassinate;
     bool p2_did_assassinate;
+    int p1_num_stolen;
+    int p2_num_stolen;
+    int p1_num_steal_blocked;
+    int p2_num_steal_blocked;
     std::vector<Action> history;
 
 public:

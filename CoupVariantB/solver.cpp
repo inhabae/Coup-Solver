@@ -128,15 +128,14 @@ public:
 
         if (g.get_current_player() == max_player) {
             double best_value = -100.0;
-            Action best_action = ASSASSINATE;
-
+            // Action best_action = ASSASSINATE;
             for (int a = 0; a < next_actions.size(); a++) {
                 g.apply_action(next_actions[a]);
                 double action_utility = -calculate_best_response(g, max_player, opp_cards, card_distribution);
                 g.undo_action();
                 if (action_utility > best_value) {
                     best_value = action_utility;
-                    best_action = next_actions[a];
+                    // best_action = next_actions[a];
                 }
             }
             // Print best action
@@ -150,14 +149,13 @@ public:
         else {
             std::vector<double> action_probs(next_actions.size(), 0.0);
             std::vector<std::vector<double>> new_card_distribution(next_actions.size());
-            
             for (int a = 0; a < next_actions.size(); a++) {
                 new_card_distribution[a].resize(opp_cards.size());
                 for (int c = 0; c < opp_cards.size(); c++) {
                     g.set_my_card(opp_cards[c]);
                     size_t infoset = g.get_hash();
                     std::vector<double> avg_strategy = get_average_strategy(infoset);
-                    double v = avg_strategy[a] * card_distribution[c]; 
+                    double v = avg_strategy[a] * card_distribution[c]; // NOTE: Without training avg_strategy might not exist, leading to SegFault
                     action_probs[a] += v;
                     new_card_distribution[a][c] = v;
                 }
@@ -185,7 +183,12 @@ public:
     }
 
     void train(int iterations) {
-        std::vector<Card> card_pool = {ASSASSIN, ASSASSIN, DUKE, DUKE, CONTESSA, CONTESSA};
+        std::vector<Card> card_pool = {
+            ASSASSIN, ASSASSIN, 
+            CAPTAIN, CAPTAIN, CAPTAIN, CAPTAIN, 
+            CONTESSA, CONTESSA, 
+            DUKE, DUKE
+        };
         std::random_device rd;
         std::mt19937 gen(rd());
         double util = 0.0;
@@ -203,53 +206,32 @@ public:
         
         current_utility = util / iterations;
         std::cout << "Average game value: " << util / iterations << std::endl;
-        
-        // Print strategies sorted by infoset string length
-        std::vector<std::pair<size_t, std::string>> sorted_infosets;
-
-        // // Collect all infosets with their strings
-        // for (const auto& pair : regret_sum) {
-        //     size_t infoset = pair.first;
-        //     if (hash_to_string.find(infoset) != hash_to_string.end()) {
-        //         sorted_infosets.push_back({infoset, hash_to_string[infoset]});
-        //     }
-        // }
-
-        // // Sort by string length
-        // std::sort(sorted_infosets.begin(), sorted_infosets.end(), 
-        //     [](const auto& a, const auto& b) {
-        //         return a.second.length() < b.second.length();
-        //     });
-
-        // // Print sorted strategies
-        // for (const auto& pair : sorted_infosets) {
-        //     size_t infoset = pair.first;
-        //     std::vector<double> avg_strategy = get_average_strategy(infoset);
-        //     std::cout << "Infoset " << pair.second << ": ";
-        //     for (double prob : avg_strategy) {
-        //         std::cout << prob << " ";
-        //     }
-        //     std::cout << std::endl;
-        // }
     }
 
     void calculate_exploitability() {
         // For each card
         double p1_br_utility = 0.0;
         double p2_br_utility = 0.0;
-        std::vector<double> card_distribution = {};
-        std::vector<Card> cards = {ASSASSIN, CONTESSA, DUKE};
+        std::vector<Card> cards = {ASSASSIN, CAPTAIN, CONTESSA, DUKE};
+        std::vector<int> card_nums = {2, 4, 2, 2}; // 2 Assassins, 4 Captains, 2 Contesssas, 2 Dukes
         for (int c = 0; c < cards.size(); c++) {
+            std::vector<double> card_distribution;
+            // Calculate card distribution
+            for (int i = 0; i < cards.size(); i++) {
+                int card_num = card_nums[i];
+                if (i == c) card_num -= 1;
+                card_distribution.push_back(card_num / 9.0);
+            }   
+
             for (int p = 0; p < 2; p++) {
                 GameState g;
                 g.set_cards(cards[c], cards[c]);
-                card_distribution.assign(cards.size(), 0.4);
-                card_distribution[c] = 0.2;
-                
                 if (p == 0) {
-                    p1_br_utility += calculate_best_response(g, p, cards, card_distribution) / 3;
+                    double v = calculate_best_response(g, p, cards, card_distribution) * (card_nums[c] / 10.0);
+                    p1_br_utility += v;
                 } else {
-                    p2_br_utility += -1 * calculate_best_response(g, p, cards, card_distribution) / 3;
+                    double v =  -1 * calculate_best_response(g, p, cards, card_distribution) * (card_nums[c] / 10.0);
+                    p2_br_utility += v;
                 }
             }
         }
@@ -259,6 +241,7 @@ public:
 
         double p1_exploitability = (p1_br_utility - current_utility);
         double p2_exploitability = (p2_br_utility + current_utility);
+
         std::cout << "P1 exploitability: " << p1_exploitability << std::endl;
         std::cout << "P2 exploitability: " << p2_exploitability << std::endl;
     }
@@ -266,7 +249,7 @@ public:
 
 int main() {
     Solver solver = Solver();
-    solver.train(1000000);
+    solver.train(10000000);
     solver.calculate_exploitability();
     return 0;
 }
