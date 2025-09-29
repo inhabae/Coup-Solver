@@ -6,8 +6,8 @@ GameState::GameState() {
     current_player = 0;
     p1_card = ASSASSIN;
     p2_card = ASSASSIN;
-    p1_coins = 0;
-    p2_coins = 0;
+    p1_coins = 2;
+    p2_coins = 2;
     p1_num_assassinate_blocked = 0;
     p2_num_assassinate_blocked = 0;
     p1_num_steal_blocked = 0;
@@ -16,6 +16,7 @@ GameState::GameState() {
     p2_num_fa_blocked = 0;
     history = {};
 }
+
 bool GameState::is_terminal() const {
     if (history.size() == 0) return false;
     return history.back() == COUP || history.back() == CHALLENGE;
@@ -257,6 +258,7 @@ void GameState::undo_action() {
         (current_player == 0 ? p1_coins : p2_coins) += COIN_TO_ASSASSINATE;
     }
     else if (last_action == COUP) (current_player == 0 ? p1_coins : p2_coins) += COIN_TO_COUP;
+    else if (last_action == BLOCK_FOREIGN_AID) (current_player == 0 ? p2_coins : p1_coins) += 2;
 
     // Update block counter
     if (last_action == BLOCK_FOREIGN_AID) (current_player == 0 ? p2_num_fa_blocked : p1_num_fa_blocked) -= 1;

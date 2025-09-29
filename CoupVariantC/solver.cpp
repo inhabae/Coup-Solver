@@ -171,7 +171,6 @@ public:
                         p /= action_probs[a];
                     }
                 }
-
                 double action_utility = -calculate_best_response(g, max_player, opp_cards, normalized_card_dist);
                 g.undo_action();
                 node_utility += action_utility * action_probs[a];
@@ -203,7 +202,7 @@ public:
             
             util += cfr(g, 1.0, 1.0);
 
-            if (i % 2 == 0 && i != 0) {
+            if (i % 10000 == 0 && i != 0) {
                 current_utility = util / i;
                 std::cout << "Iteration #: " << i << " EV: " << util / i << std::endl;
                 calculate_exploitability();
@@ -244,7 +243,6 @@ public:
         }
         std::cout << "P1 BR EV: " << p1_br_utility << std::endl;
         std::cout << "P2 BR EV: " << p2_br_utility << std::endl;
-
 
         double p1_exploitability = (p1_br_utility - current_utility);
         double p2_exploitability = (p2_br_utility + current_utility);
