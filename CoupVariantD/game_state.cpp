@@ -367,6 +367,19 @@ void GameState::lose_card(Card card) {
 }
 
 void GameState::undo_lose_card(Card card) {
+    // Undoing turn order correction FIRST!
+    std::vector<Action> starting_actions = {INCOME, FOREIGN_AID, TAX, STEAL1, STEAL2, ASSASSINATE, COUP};
+    for (size_t i = 1; i <= 5; i++) { // 5 is the max number of actions per turn
+        // Find out how many actions were taken in the current turn
+        if (std::find(starting_actions.begin(), starting_actions.end(), history[history.size() - i]) != starting_actions.end()) {
+            // Even # of actions = Correct alternation
+            if (i % 2 == 0) ; 
+            // Odd # of actions = Incorrect alternation -> Apply correction
+            else current_player = 1 - current_player;
+            break;
+        }
+    }
+
     std::array<Card, 2> player_cards = (current_player == 0 ? p1_cards : p2_cards);
     std::array<int, 2>& player_influence = (current_player == 0 ? p1_influence : p2_influence);
     if (player_cards[0] == card && player_influence[0] == 0) player_influence[0] = 1;
@@ -374,8 +387,8 @@ void GameState::undo_lose_card(Card card) {
     else assert(false && "Undoing lose_card() has gained no card back.");
 
     // Undoing challenge resolution
-    if (history[history.size() - 2] == CHALLENGE) {
-        Action challenged_action = history[history.size() - 3];
+    if (history[history.size() - 1] == CHALLENGE) {
+        Action challenged_action = history[history.size() - 2];
         if (challenged_action == TAX) (current_player == 0 ? p1_coins : p2_coins) += 3;
         else if (challenged_action == STEAL1 || challenged_action == BLOCK_STEAL1_AMB || challenged_action == BLOCK_STEAL1_CAP) {
             (current_player == 0 ? p1_coins : p2_coins) += 1;
@@ -387,19 +400,6 @@ void GameState::undo_lose_card(Card card) {
         }
         else if (challenged_action == ASSASSINATE) (current_player == 0 ? p1_coins : p2_coins) -= 3;
         else if (challenged_action == BLOCK_FOREIGN_AID) (current_player == 0 ? p2_coins : p1_coins) -= 2;
-    }
-
-    // Undoing turn order correction
-    std::vector<Action> starting_actions = {INCOME, FOREIGN_AID, TAX, STEAL1, STEAL2, ASSASSINATE, COUP};
-    for (size_t i = 1; i <= 5; i++) { // 5 is the max number of actions per turn
-        // Find out how many actions were taken in the current turn
-        if (std::find(starting_actions.begin(), starting_actions.end(), history[history.size() - i]) != starting_actions.end()) {
-            // Even # of actions = Correct alternation
-            if (i % 2 == 0) ; 
-            // Odd # of actions = Incorrect alternation -> Apply correction
-            else current_player = 1 - current_player;
-            return;
-        }
     }
 }
 
@@ -596,6 +596,15 @@ std::string GameState::get_game_state() {
     for (Action a : get_legal_actions()) {
         output_string += action_to_string.at(a) + " ";
     }
+
+    output_string += "\nBlock count variables: ";
+    output_string += std::to_string(p1_num_assassinate_blocked) + " ";
+    output_string += std::to_string(p2_num_assassinate_blocked) + " ";
+    output_string += std::to_string(p1_num_steal_blocked) + " ";
+    output_string += std::to_string(p2_num_steal_blocked) + " ";
+    output_string += std::to_string(p1_num_fa_blocked) + " ";
+    output_string += std::to_string(p2_num_fa_blocked);
+
     output_string += "\n\n";
     
     return output_string;

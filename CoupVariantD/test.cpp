@@ -412,6 +412,8 @@ void test9() {
     GameState g;
     std::string s1;
     std::string s2;
+
+    // INCOME
     s1 = g.get_game_state();
     g.apply_action(INCOME);
     g.undo_action();
@@ -426,21 +428,443 @@ void test9() {
     s2 = g.get_game_state();
     assert(s1 == s2);
 
+    // FOREIGN_AID
     s1 = g.get_game_state();
     g.apply_action(FOREIGN_AID);
     g.undo_action();
     s2 = g.get_game_state();
     assert(s1 == s2);
 
+    // TAX
     s1 = g.get_game_state();
     g.apply_action(TAX);
     g.undo_action();
     s2 = g.get_game_state();
     assert(s1 == s2);
 
+    // STEAL1
+    s1 = g.get_game_state();
+    g.apply_action(STEAL2);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
 
+    // STEAL2
+    g.apply_action(STEAL2);
+    g.apply_action(INCOME);
+    s1 = g.get_game_state();
+    g.apply_action(STEAL1);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // ASSASSINATE
+    s1 = g.get_game_state();
+    g.apply_action(ASSASSINATE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // ASSASSINATE
+    s1 = g.get_game_state();
+    g.apply_action(ASSASSINATE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.apply_action(TAX);
+    g.apply_action(TAX);
+    g.apply_action(TAX);
+    g.apply_action(TAX);
+
+    // COUP
+    s1 = g.get_game_state();
+    g.apply_action(COUP);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
 }
 
+void test10() {
+    // Testing basic undo
+    GameState g;
+    std::string s1;
+    std::string s2;
+
+    // BLOCK_FOREIGN_AID
+    g.apply_action(FOREIGN_AID);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_FOREIGN_AID);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // BLOCK_STEAL2_AMB
+    g.apply_action(STEAL2);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_STEAL2_AMB);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // BLOCK_STEAL2_CAP
+    g.apply_action(STEAL2);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.apply_action(STEAL2);
+    g.apply_action(INCOME);
+
+    // BLOCK_STEAL1_AMB
+    g.apply_action(STEAL1);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_STEAL1_AMB);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // BLOCK_STEAL1_CAP
+    g.apply_action(STEAL1);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_STEAL1_CAP);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // BLOCK_ASSASSINATE
+    g.apply_action(ASSASSINATE);
+    s1 = g.get_game_state();
+    g.apply_action(BLOCK_ASSASSINATE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // CHALLENGE
+    s1 = g.get_game_state();
+    g.apply_action(CHALLENGE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // PASS_BLOCK
+    s1 = g.get_game_state();
+    g.apply_action(PASS_BLOCK);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // SHOW_ASSASSIN
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(SHOW_ASSASSIN);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // RESET
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+
+    g.set_cards(AMBASSADOR, CAPTAIN, CONTESSA, DUKE);
+
+    // SHOW_AMBASSADOR
+    g.apply_action(TAX);
+    g.apply_action(STEAL2);
+    g.apply_action(BLOCK_STEAL2_AMB);
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(SHOW_AMBASSADOR);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.undo_action();
+    g.undo_action();
+
+    // SHOW_CAPTAIN
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(SHOW_CAPTAIN);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+
+    // SHOW_CONTESSA
+    g.apply_action(TAX);
+    g.apply_action(ASSASSINATE);
+    g.apply_action(BLOCK_ASSASSINATE);
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(SHOW_CONTESSA);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+
+    // SHOW_DUKE
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(SHOW_DUKE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+
+    // LOSE_ASSASSIN
+    g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, DUKE);
+    g.apply_action(TAX);
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_ASSASSIN);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_ASSASSIN);
+    g.apply_action(STEAL2);
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // LOSE_AMBASSADOR
+    g.set_cards(AMBASSADOR, AMBASSADOR, ASSASSIN, DUKE);
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_AMBASSADOR);
+    g.apply_action(STEAL2);
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // LOSE_CAPTAIN
+    g.set_cards(CAPTAIN, CAPTAIN, ASSASSIN, DUKE);
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_CAPTAIN);
+    g.apply_action(STEAL2);
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // LOSE_CAPTAIN
+    g.set_cards(CONTESSA, CONTESSA, ASSASSIN, DUKE);
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_CONTESSA);
+    g.apply_action(STEAL2);
+    g.apply_action(BLOCK_STEAL2_CAP);
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    g.undo_action();
+    // LOSE_DUKE
+    g.set_cards(ASSASSIN, DUKE, ASSASSIN, DUKE);
+    g.apply_action(STEAL2);
+    g.apply_action(CHALLENGE);
+    s1 = g.get_game_state();
+    g.apply_action(LOSE_DUKE);
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+}
+
+void test11() {
+    // Double assassination
+    GameState g;
+    std::string s1;
+    std::string s2;
+
+    g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, DUKE);
+    g.apply_action(INCOME);
+    g.apply_action(INCOME);
+
+    // Challenging ASSASSINATE
+    s1 = g.get_game_state();
+    g.apply_action(ASSASSINATE);
+    g.apply_action(CHALLENGE);
+    g.apply_action(SHOW_ASSASSIN);
+    g.apply_action(LOSE_BOTH);
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+
+    // Challenging BLOCK_ASSASSINATE
+    s1 = g.get_game_state();
+    g.apply_action(ASSASSINATE);
+    g.apply_action(BLOCK_ASSASSINATE);
+    g.apply_action(CHALLENGE);
+    g.apply_action(LOSE_BOTH);
+    assert(g.is_terminal());
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    g.undo_action();
+    s2 = g.get_game_state();
+    assert(s1 == s2);
+}
+
+void test12() {
+    // This is Game 3 vs Derek
+    GameState g;
+    g.set_cards(AMBASSADOR, DUKE, ASSASSIN, DUKE);
+
+    std::vector<std::string> string_vec;
+
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(COUP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_DUKE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(COUP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_AMBASSADOR);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(ASSASSINATE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(CHALLENGE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(SHOW_ASSASSIN);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_DUKE);
+
+    for (int i = 0; i < 15; i++) {
+        g.undo_action();
+        assert (string_vec.back() == g.get_game_state());
+        string_vec.pop_back();
+    }
+}
+
+void test13() {
+    // Game 8 vs Derek
+    GameState g;
+    g.set_cards(CONTESSA, DUKE, CAPTAIN, DUKE);
+    std::vector<std::string> string_vec;
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(COUP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_DUKE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(COUP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_DUKE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(FOREIGN_AID);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(FOREIGN_AID);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(FOREIGN_AID);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(STEAL2);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(BLOCK_STEAL2_CAP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(CHALLENGE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_CONTESSA);
+
+    for (int i = 0; i < 15; i++) {
+        g.undo_action();
+        assert (string_vec.back() == g.get_game_state());
+        string_vec.pop_back();
+    }
+}
+
+void test14() {
+    // Hypothetical game from test3()
+
+    GameState g;
+    std::vector<std::string> string_vec;
+    g.set_cards(ASSASSIN, CONTESSA, CAPTAIN, DUKE);
+
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(INCOME);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(TAX);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(ASSASSINATE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_DUKE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(FOREIGN_AID);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(FOREIGN_AID);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(STEAL2);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(BLOCK_STEAL2_AMB);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(CHALLENGE);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_CONTESSA);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(STEAL2);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(COUP);
+    string_vec.push_back(g.get_game_state());
+    g.apply_action(LOSE_ASSASSIN);
+
+    for (int i = 0; i < 13; i++) {
+        g.undo_action();
+        assert (string_vec.back() == g.get_game_state());
+        string_vec.pop_back();
+    }
+}
 int main() {
     test1();
     test2();
@@ -451,6 +875,11 @@ int main() {
     test7();
     test8();
     test9();
+    test10();
+    test11();
+    test12();
+    test13();
+    test14();
     return 0;
 }
 
