@@ -69,65 +69,58 @@ double GameState::get_utility() const {
     assert(false && "Invalid state in get_utility(): game not terminal");
 }
    
-// double GameState::get_br_utility(int maximizing_player, std::vector<double> card_distribution) const {
-//     Action last_action = history.back();
-//     // Coup
-//     if (last_action == COUP) return -1.0;
-//     // Maximizing Player is challenged -> Check card 
-//     if (maximizing_player == current_player) {
-//         Action challenged_action = history[history.size() - 2];
-//         Card current_card = (current_player == 0) ? p1_card : p2_card;
-//         bool has_correct_card = false;
-//         if (current_card == DUKE) {
-//             if (challenged_action == TAX || challenged_action == BLOCK_FOREIGN_AID) {
-//                 has_correct_card = true;
-//             }
-//         }
-//         else if (challenged_action == ASSASSINATE && current_card == ASSASSIN) {
-//             has_correct_card = true;
-//         }
-//         else if (challenged_action == BLOCK_ASSASSINATE && current_card == CONTESSA) {
-//             has_correct_card = true;
-//         }
-//         else if (current_card == CAPTAIN) {
-//             if (challenged_action == STEAL1 || challenged_action == STEAL2 || challenged_action == BLOCK_STEAL1_CAP || challenged_action == BLOCK_STEAL2_CAP) {
-//                 has_correct_card = true;
-//             }
-//         }
-//         else if (current_card == AMBASSADOR) {
-//             if (challenged_action == BLOCK_STEAL1_AMB || challenged_action == BLOCK_STEAL2_AMB) {
-//                 has_correct_card = true;
-//             }
-//         }
-//         return has_correct_card ? 1.0 : -1.0;
-//     }
-//     // Non-Maximizing Player is challenged -> Consider distribution
-//     else {
-//         // Find challenged action
-//         Action challenged_action = history[history.size() - 2];
+double GameState::get_br_utility(int maximizing_player, std::vector<double> cards_distribution) const {
+    const Action last_action = history.back();
+    // Coup
+    if (last_action == COUP) return -1.0;
 
-//         Card challenged_card = ASSASSIN;
-//         if (challenged_action == BLOCK_ASSASSINATE) challenged_card = CONTESSA;
-//         else if (challenged_action == TAX || challenged_action == BLOCK_FOREIGN_AID) challenged_card = DUKE;
-//         else if (challenged_action == STEAL1 || challenged_action == STEAL2) challenged_card = CAPTAIN;
-//         else if (challenged_action == BLOCK_STEAL1_CAP || challenged_action == BLOCK_STEAL2_CAP) challenged_card = CAPTAIN;
-//         else if (challenged_action == BLOCK_STEAL1_AMB|| challenged_action == BLOCK_STEAL2_AMB) challenged_card = AMBASSADOR;
-        
-//         std::vector<Card> cards {ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE};
+    const Action challenged_action = history[history.size() - 2];
+    Card challenged_card;
 
-//         // Calculate utility based on the distribution
-//         double utility = 0.0;
-//         for (size_t c = 0; c < card_distribution.size(); c++)
-//             if (challenged_card == cards[c]) {
-//                 utility += card_distribution[c] * 1.0;
-//             }
-//             else {
-//                 utility -= card_distribution[c] * 1.0;
-//             } 
-//         return utility;
-//     }
-//     assert(false && "get_br_utility() called on non-terminal state");
-// }
+    switch (challenged_action) {
+        case BLOCK_ASSASSINATE:
+            challenged_card = CONTESSA;
+            break;
+        case TAX:
+        case BLOCK_FOREIGN_AID:
+            challenged_card = DUKE;
+            break;
+        case STEAL1:
+        case STEAL2:
+        case BLOCK_STEAL1_CAP:
+        case BLOCK_STEAL2_CAP:
+            challenged_card = CAPTAIN;
+            break;
+        case BLOCK_STEAL1_AMB:
+        case BLOCK_STEAL2_AMB:
+            challenged_card = AMBASSADOR;
+            break;
+        default:
+            assert(false && "Invalid challenged action in get_br_utility()");
+            break;
+    }
+    // Maximizing Player is challenged -> Check card 
+    if (maximizing_player == current_player) {
+        const std::array<Card, 2>& current_cards = (current_player == 0) ? p1_cards : p2_cards;
+        const std::array<int, 2>& current_influence = (current_player == 0) ? p1_influence : p2_influence;
+        if ((current_influence[0] && current_cards[0] == challenged_card) ||
+            (current_influence[1] && current_cards[1] == challenged_card)) {
+            return 1.0;
+        }
+        return -1.0;
+    }
+    // Non-Maximizing Player is challenged -> Consider distribution
+    else {
+        double utility = 0.0;
+        for (size_t i = 0; i < cards_distribution.size(); i++) {
+            const bool has_challenged_card = (holdings[i][0] == challenged_card || 
+                                            holdings[i][1] == challenged_card);
+            utility += cards_distribution[i] * (has_challenged_card ? 1.0 : -1.0);
+        }
+        return utility;
+    }
+    assert(false && "get_br_utility() called on non-terminal state");
+}
 
 int GameState::get_current_player() const {
     return current_player;

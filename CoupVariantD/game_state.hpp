@@ -42,6 +42,24 @@ const int COIN_TO_COUP = 7;
 const int COIN_TO_MUST_COUP = 10;
 const int MAX_BLOCK_NUM = 2;
 
+const std::array<std::array<Card, 2>, 15> holdings = {{
+    {ASSASSIN, ASSASSIN},
+    {ASSASSIN, AMBASSADOR},
+    {ASSASSIN, CAPTAIN},
+    {ASSASSIN, CONTESSA},
+    {ASSASSIN, DUKE},
+    {AMBASSADOR, AMBASSADOR},
+    {AMBASSADOR, CAPTAIN},
+    {AMBASSADOR, CONTESSA},
+    {AMBASSADOR, DUKE},
+    {CAPTAIN, CAPTAIN},
+    {CAPTAIN, CONTESSA},
+    {CAPTAIN, DUKE},
+    {CONTESSA, CONTESSA},
+    {CONTESSA, DUKE},
+    {DUKE, DUKE}
+}};
+
 class GameState {
 public:
   int current_player;
