@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -O2 -std=c++14
+CXXFLAGS = -Wall -O2 -std=c++17
 
 test: game_state.o test.o
 	$(CXX) $(CXXFLAGS) -o test game_state.o test.o
