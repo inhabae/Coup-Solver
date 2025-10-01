@@ -25,8 +25,8 @@ GameState::GameState() {
     p2_cards = {ASSASSIN, ASSASSIN};
     p1_influence = {1,1};
     p2_influence = {1,1};
-    p1_coins = 10;
-    p2_coins = 10;
+    p1_coins = 2;
+    p2_coins = 2;
     p1_num_assassinate_blocked = 0;
     p2_num_assassinate_blocked = 0;
     p1_num_steal_blocked = 0;
@@ -70,11 +70,11 @@ double GameState::get_utility() const {
 }
    
 double GameState::get_br_utility(int maximizing_player, std::array<double, NUM_HOLDINGS> cards_distribution) const {
-    const Action last_action = history.back();
+    const Action prev_action = history[history.size() - 2];
     // Coup
-    if (last_action == COUP) return -1.0;
-
-    const Action challenged_action = history[history.size() - 2];
+    if (prev_action == COUP) return 1.0;
+    // Challenge
+    const Action challenged_action = history[history.size() - (history[history.size() - 2] == CHALLENGE ? 3 : 4)];
     Card challenged_card;
 
     switch (challenged_action) {
@@ -698,7 +698,8 @@ void GameState::print_game_state() const {
     for (Action a : get_legal_actions()) {
         std::cout << ACTION_NAMES[a] << " ";
     }
-    std::cout << std::endl << std::endl;
+    std::cout << std::endl;
+    std::cout << std::endl;
 }
 
 // For debugging
@@ -740,7 +741,6 @@ std::string GameState::get_game_state() const {
     output_string += std::to_string(p2_num_steal_blocked) + " ";
     output_string += std::to_string(p1_num_fa_blocked) + " ";
     output_string += std::to_string(p2_num_fa_blocked);
-
     output_string += "\n\n";
     
     return output_string;
