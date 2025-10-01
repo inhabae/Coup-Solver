@@ -1,12 +1,10 @@
 #include "game_state.hpp"
 
-#include <iostream>
-#include <unordered_map>
-#include <random>
 #include <algorithm>
 #include <cassert>
-
-int HI = 0;
+#include <iostream>
+#include <random>
+#include <unordered_map>
 
 class Solver {
 public:
@@ -66,9 +64,6 @@ public:
     }
 
     double cfr(GameState& g, double p1_reach, double p2_reach) {
-        std::cout << HI++ << std::endl;
-        // g.print_game_state();
-
         if (g.is_terminal()) {
             return g.get_utility();
         }
