@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cassert>
 
+int HI = 0;
+
 class Solver {
 public:
     std::unordered_map<size_t, std::vector<double>> regret_sum;
@@ -64,6 +66,9 @@ public:
     }
 
     double cfr(GameState& g, double p1_reach, double p2_reach) {
+        std::cout << HI++ << std::endl;
+        // g.print_game_state();
+
         if (g.is_terminal()) {
             return g.get_utility();
         }
@@ -118,67 +123,70 @@ public:
         return node_utility;
     }
 
-    // double calculate_best_response(GameState& g, const int max_player, const std::vector<Card> opp_cards, std::vector<double> card_distribution) {
-    //     if (g.is_terminal()) {
-    //         return g.get_br_utility(max_player, card_distribution);
-    //     }
+    double calculate_best_response(GameState& g, const int max_player, std::array<double, NUM_HOLDINGS> pair_distribution) {
+        if (g.is_terminal()) {
+            return g.get_br_utility(max_player, pair_distribution);
+        }
 
-    //     std::vector<Action> next_actions = g.get_legal_actions();
-
-    //     if (g.get_current_player() == max_player) {
-    //         double best_value = -100.0;
-    //         // Action best_action = ASSASSINATE;
-    //         for (size_t a = 0; a < next_actions.size(); a++) {
-    //             g.apply_action(next_actions[a]);
-    //             double action_utility = -calculate_best_response(g, max_player, opp_cards, card_distribution);
-    //             g.undo_action();
-    //             if (action_utility > best_value) {
-    //                 best_value = action_utility;
-    //                 // best_action = next_actions[a];
-    //             }
-    //         }
-    //         // Print best action
-    //         // std::cout << "Player " << max_player + 1 << ": History: ";
-    //         // for (Action a : g.history) {
-    //         //     std::cout << a << " ";
-    //         // }
-    //         // std::cout << "Best action: " << best_action << std::endl;
-    //         return best_value;
-    //     }
-    //     else {
-    //         std::vector<double> action_probs(next_actions.size(), 0.0);
-    //         std::vector<std::vector<double>> new_card_distribution(next_actions.size());
-    //         for (size_t a = 0; a < next_actions.size(); a++) {
-    //             new_card_distribution[a].resize(opp_cards.size());
-    //             for (size_t c = 0; c < opp_cards.size(); c++) {
-    //                 g.set_my_cards(opp_cards[c]);
-    //                 size_t infoset = g.get_hash();
-    //                 std::vector<double> avg_strategy = get_average_strategy(infoset);
-    //                 double v = avg_strategy[a] * card_distribution[c]; // NOTE: Without training avg_strategy might not exist, leading to SegFault
-    //                 action_probs[a] += v;
-    //                 new_card_distribution[a][c] = v;
-    //             }
-    //         }
+        // MAXIMIZING PLAYER TURN
+        if (g.get_current_player() == max_player) {
+            std::vector<Action> next_actions = g.get_legal_actions();
+            double best_value = -100.0;
+            // Action best_action = ASSASSINATE;
+            for (size_t a = 0; a < next_actions.size(); a++) {
+                g.apply_action(next_actions[a]);
+                double action_utility = -calculate_best_response(g, max_player, pair_distribution);
+                g.undo_action();
+                if (action_utility > best_value) {
+                    best_value = action_utility;
+                    // best_action = next_actions[a];
+                }
+            }
+            // Print best action
+            // std::cout << "Player " << max_player + 1 << ": History: ";
+            // for (Action a : g.history) {
+            //     std::cout << a << " ";
+            // }
+            // std::cout << "Best action: " << best_action << std::endl;
+            return best_value;
+        }
+        else {
+            std::array<double, NUM_ACTIONS> action_probs = {0.0};
+            std::array<std::array<double, NUM_HOLDINGS>, NUM_ACTIONS> new_card_distribution = {};
             
-    //         double node_utility = 0.0;
-    //         for (size_t a = 0; a < next_actions.size(); a++) {
-    //             g.apply_action(next_actions[a]);
+            for (size_t h = 0; h < NUM_HOLDINGS; h++) {
+                g.set_my_cards(holdings[h]);
+                std::vector<Action> legal_actions = g.get_legal_actions();
+                std::vector<double> avg_strategy = get_average_strategy(g.get_hash());
 
-    //             // Normalize new card distribution
-    //             std::vector<double> normalized_card_dist = new_card_distribution[a];
-    //             if (action_probs[a] > 0) {
-    //                 for (double& p : normalized_card_dist) {
-    //                     p /= action_probs[a];
-    //                 }
-    //             }
-    //             double action_utility = -calculate_best_response(g, max_player, opp_cards, normalized_card_dist);
-    //             g.undo_action();
-    //             node_utility += action_utility * action_probs[a];
-    //         }
-    //         return node_utility;
-    //     }
-    //     assert(false);
-    // }
+                for (size_t a = 0; a < legal_actions.size(); a++) {
+                    int action_index = legal_actions[a];
+                    double v = avg_strategy[a] * pair_distribution[h];
+                    action_probs[action_index] += v;
+                    new_card_distribution[action_index][h] = v;
+                }
+            }
+
+            double node_utility = 0.0;
+            for (size_t a = 0; a < NUM_ACTIONS; a++) {
+                if (action_probs[a] == 0) continue;
+                const Action action = static_cast<Action>(a);
+
+                // Normalize new card distribution
+                std::array<double, NUM_HOLDINGS> normalized_card_dist = new_card_distribution[a];
+                for (double& p : normalized_card_dist) {
+                    p /= action_probs[a];
+                }
+
+                g.apply_action(action);
+                double action_utility = -calculate_best_response(g, max_player, normalized_card_dist);
+                g.undo_action();
+                node_utility += action_utility * action_probs[a];
+            }
+            return node_utility;
+        }
+        assert(false);
+    }
 
     void train(size_t iterations) {
         std::vector<Card> card_pool = {
@@ -227,32 +235,29 @@ public:
 
     // Calculate pair distribution after removing 2 cards
     // Returns probabilities in same order as holdings array
-    std::vector<double> calculate_pair_distribution(Card removed_card1, Card removed_card2) {
+    std::array<double, NUM_HOLDINGS> calculate_pair_distribution(Card removed_card1, Card removed_card2) {
         std::vector<int> remaining_counts = {3, 3, 3, 3, 3};
         remaining_counts[card_to_index(removed_card1)]--;
         remaining_counts[card_to_index(removed_card2)]--;
         
         constexpr double INV_TOTAL_PAIRS = 1.0 / 78.0;  // Reciprocal of C(13, 2)
         
-        std::vector<double> pair_distribution;
-        pair_distribution.reserve(holdings.size());
+        std::array<double, NUM_HOLDINGS> pair_distribution;
         
-        // Iterate through holdings array order to match exactly
-        for (const auto& holding : holdings) {
-            const int idx1 = card_to_index(holding[0]);
-            const int idx2 = card_to_index(holding[1]);
-            
-            if (holding[0] == holding[1]) {
-                // Same card pair: C(count, 2) = count * (count-1) / 2
+        for (size_t h = 0; h < NUM_HOLDINGS; h++) {
+            const int idx1 = card_to_index(holdings[h][0]);
+            const int idx2 = card_to_index(holdings[h][1]);
+            // Same card pair: C(count, 2) = count * (count-1) / 2
+            if (idx1 == idx2) {
                 const int count = remaining_counts[idx1];
                 const double prob = (count >= 2) ? 
                     (count * (count - 1) * 0.5 * INV_TOTAL_PAIRS) : 0.0;
-                pair_distribution.push_back(prob);
+                pair_distribution[h] = prob;
             } else {
                 // Different card pair: count1 * count2
                 const double prob = (remaining_counts[idx1] >= 1 && remaining_counts[idx2] >= 1) ?
                     (remaining_counts[idx1] * remaining_counts[idx2] * INV_TOTAL_PAIRS) : 0.0;
-                pair_distribution.push_back(prob);
+                pair_distribution[h] = prob;
             }
         }
         return pair_distribution;
@@ -275,14 +280,12 @@ public:
         for (size_t c = 0; c < holdings.size(); c++) {
             const Card card1 = holdings[c][0];
             const Card card2 = holdings[c][1];
-            std::vector<double> pair_distribution = calculate_pair_distribution(card1, card2);
+            std::array<double, NUM_HOLDINGS> pair_distribution = calculate_pair_distribution(card1, card2);
             
             for (int p = 0; p < 2; p++) {
                 GameState g;
                 g.set_cards(card1, card2, ASSASSIN, ASSASSIN);
-                
-                double v = 0; 
-                // double v = calculate_best_response(g, p, pair_distribution) * calculate_pair_probability(card1, card2);
+                double v = calculate_best_response(g, p, pair_distribution) * calculate_pair_probability(card1, card2);
                 if (p == 0) {
                     p1_br_utility += v;
                 } else {
@@ -304,7 +307,7 @@ public:
 
 int main() {
     Solver solver = Solver();
-    // solver.train(10000000);
-    solver.calculate_exploitability();
+    solver.train(1);
+    // solver.calculate_exploitability();
     return 0;
 }

@@ -37,6 +37,9 @@ enum Action {
 
 enum Card { ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE };
 
+const int NUM_ACTIONS = 26;
+const int NUM_HOLDINGS = 15;
+
 const int COIN_TO_ASSASSINATE = 3;
 const int COIN_TO_COUP = 7;
 const int COIN_TO_MUST_COUP = 10;
@@ -81,7 +84,7 @@ public:
   GameState();
   bool is_terminal() const;
   double get_utility() const;
-  double get_br_utility(int, std::vector<double>) const;
+  double get_br_utility(int, std::array<double, NUM_HOLDINGS>) const;
   int get_current_player() const;
   void set_cards(Card, Card, Card, Card);
   void set_my_cards(const std::array<Card, 2>);

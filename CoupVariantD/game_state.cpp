@@ -25,8 +25,8 @@ GameState::GameState() {
     p2_cards = {ASSASSIN, ASSASSIN};
     p1_influence = {1,1};
     p2_influence = {1,1};
-    p1_coins = 2;
-    p2_coins = 2;
+    p1_coins = 10;
+    p2_coins = 10;
     p1_num_assassinate_blocked = 0;
     p2_num_assassinate_blocked = 0;
     p1_num_steal_blocked = 0;
@@ -69,7 +69,7 @@ double GameState::get_utility() const {
     assert(false && "Invalid state in get_utility(): game not terminal");
 }
    
-double GameState::get_br_utility(int maximizing_player, std::vector<double> cards_distribution) const {
+double GameState::get_br_utility(int maximizing_player, std::array<double, NUM_HOLDINGS> cards_distribution) const {
     const Action last_action = history.back();
     // Coup
     if (last_action == COUP) return -1.0;
@@ -112,10 +112,10 @@ double GameState::get_br_utility(int maximizing_player, std::vector<double> card
     // Non-Maximizing Player is challenged -> Consider distribution
     else {
         double utility = 0.0;
-        for (size_t i = 0; i < cards_distribution.size(); i++) {
-            const bool has_challenged_card = (holdings[i][0] == challenged_card || 
-                                            holdings[i][1] == challenged_card);
-            utility += cards_distribution[i] * (has_challenged_card ? 1.0 : -1.0);
+        for (size_t h = 0; h < NUM_HOLDINGS; h++) {
+            const bool has_challenged_card = (holdings[h][0] == challenged_card || 
+                                            holdings[h][1] == challenged_card);
+            utility += cards_distribution[h] * (has_challenged_card ? 1.0 : -1.0);
         }
         return utility;
     }
