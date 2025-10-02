@@ -89,12 +89,12 @@ public:
   int num_p2_has_allowed_tax;
 
   // LIKELY #1
-  int num_p1_allowed_foreign_aid;
-  int num_p2_allowed_foreign_aid;
-  int num_p1_allowed_steal;
-  int num_p2_allowed_steal;
-  int num_p1_allowed_assassinate;
-  int num_p2_allowed_assassinate;
+  int num_p1_has_allowed_foreign_aid;
+  int num_p2_has_allowed_foreign_aid;
+  int num_p1_has_allowed_steal;
+  int num_p2_has_allowed_steal;
+  int num_p1_has_allowed_assassinate;
+  int num_p2_has_allowed_assassinate;
 
   // LIKELY #2
   int num_p1_has_claimed_duke;
