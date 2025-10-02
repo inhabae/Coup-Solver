@@ -72,13 +72,23 @@ public:
   std::array<int, 2> p2_influence;
   int p1_coins;
   int p2_coins;
-  int p1_num_assassinate_blocked;
-  int p2_num_assassinate_blocked;
-  int p1_num_steal_blocked;
-  int p2_num_steal_blocked;
-  int p1_num_fa_blocked;
-  int p2_num_fa_blocked;
   std::vector<Action> history;
+
+  // LIKELY #1
+  int p1_num_allowed_foreign_aid;
+  int p1_num_allowed_steal;
+  int p1_num_allowed_assassinate;
+  int p2_num_allowed_foreign_aid;
+  int p2_num_allowed_steal;
+  int p2_num_allowed_assassinate;
+
+  // LIKELY #2
+  int num_p1_has_claimed_duke;
+  int num_p2_has_claimed_duke;
+  int num_p1_has_claimed_steal_blocker;
+  int num_p2_has_claimed_steal_blocker;
+  int num_p1_has_claimed_contessa;
+  int num_p2_has_claimed_contessa;
 
 public:
   GameState();
@@ -96,6 +106,7 @@ public:
   void undo_action();
   size_t get_hash() const;
   std::string get_infoset_string() const;
+  void print_history() const;
   void print_game_state() const;
   std::string get_game_state() const;
 };

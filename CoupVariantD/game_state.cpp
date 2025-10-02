@@ -27,13 +27,23 @@ GameState::GameState() {
     p2_influence = {1,1};
     p1_coins = 2;
     p2_coins = 2;
-    p1_num_assassinate_blocked = 0;
-    p2_num_assassinate_blocked = 0;
-    p1_num_steal_blocked = 0;
-    p2_num_steal_blocked = 0;
-    p1_num_fa_blocked = 0;
-    p2_num_fa_blocked = 0;
     history = {};
+
+    // LIKELY #1
+    p1_num_allowed_foreign_aid = 0;
+    p1_num_allowed_steal = 0;
+    p1_num_allowed_assassinate = 0;
+    p2_num_allowed_foreign_aid = 0;
+    p2_num_allowed_steal = 0;
+    p2_num_allowed_assassinate = 0;
+
+    // LIKELY #2
+    num_p1_has_claimed_duke = 0;
+    num_p2_has_claimed_duke = 0;
+    num_p1_has_claimed_steal_blocker = 0;
+    num_p2_has_claimed_steal_blocker = 0;
+    num_p1_has_claimed_contessa = 0;
+    num_p2_has_claimed_contessa = 0;
 }
 
 bool GameState::is_terminal() const {
@@ -139,6 +149,11 @@ std::vector<Action> GameState::get_legal_actions() const {
     const std::array<int, 2>& opp_influence = is_p1 ? p2_influence : p1_influence;
     const int my_lives = my_influence[0] + my_influence[1];
     const int opp_lives = opp_influence[0] + opp_influence[1];
+
+    // Allowed actions
+    const int my_num_allowed_foreign_aid = is_p1 ? p1_num_allowed_foreign_aid : p2_num_allowed_foreign_aid;
+    const int my_num_allowed_steal = is_p1 ? p1_num_allowed_steal : p2_num_allowed_steal;
+    const int my_num_allowed_assassinate = is_p1 ? p1_num_allowed_assassinate : p2_num_allowed_assassinate;
     
     // Helper lambda for forced/priority coups
     auto must_coup = [&]() -> bool {
@@ -169,10 +184,11 @@ std::vector<Action> GameState::get_legal_actions() const {
     if (last_action == FOREIGN_AID) {
         if (must_coup()) return {COUP};
         
-        std::vector<Action> actions = {INCOME, FOREIGN_AID, TAX, STEAL2};
+        std::vector<Action> actions = {INCOME, FOREIGN_AID, STEAL2};
         if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
-        actions.push_back(BLOCK_FOREIGN_AID);
+
+        if (my_num_allowed_foreign_aid == 0) actions.push_back(BLOCK_FOREIGN_AID);
         return actions;
     }
     
@@ -189,7 +205,8 @@ std::vector<Action> GameState::get_legal_actions() const {
     
     // vs Steal 1
     if (last_action == STEAL1) {
-        return {TAX, BLOCK_STEAL1_AMB, BLOCK_STEAL1_CAP, CHALLENGE};
+        if (my_num_allowed_steal == 0) return {TAX, BLOCK_STEAL1_AMB, BLOCK_STEAL1_CAP, CHALLENGE};
+        return {TAX, CHALLENGE};
     }
     
     // vs Steal 2
@@ -199,16 +216,32 @@ std::vector<Action> GameState::get_legal_actions() const {
         std::vector<Action> actions = {TAX};
         if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
-        actions.insert(actions.end(), {BLOCK_STEAL2_AMB, BLOCK_STEAL2_CAP, CHALLENGE});
+
+        if (my_num_allowed_steal == 0) {
+            actions.insert(actions.end(), {BLOCK_STEAL2_AMB, BLOCK_STEAL2_CAP, CHALLENGE});
+        }
+        else {
+            actions.push_back(CHALLENGE);
+        }
+
         return actions;
     }
     
     // vs Assassinate
     if (last_action == ASSASSINATE) {
+        if (my_num_allowed_assassinate > 0) return {CHALLENGE};
+
         std::vector<Action> actions = {BLOCK_ASSASSINATE, CHALLENGE};
         
-        // If only one life, must block or challenge (no voluntary loss)
+        //With one influence, player must block or challenge (no voluntary loss)
         if (my_lives == 1) return actions;
+        // When holding CONTESSA, BLOCK or CHALLENGE
+        if ((my_cards[0] == CONTESSA && my_influence[0] == 1) ||
+            (my_cards[0] == CONTESSA && my_influence[1] == 1)) {
+                return actions;
+        }
+
+
         std::vector<Action> lose_actions = get_card_losing_actions(my_cards, my_influence);
         actions.insert(actions.end(), lose_actions.begin(), lose_actions.end());
         return actions;
@@ -216,19 +249,22 @@ std::vector<Action> GameState::get_legal_actions() const {
     
     // Block responses - challenge or pass
     if (last_action == BLOCK_FOREIGN_AID) {
-        const bool was_blocked = is_p1 ? p1_num_fa_blocked >= MAX_BLOCK_NUM : p2_num_fa_blocked >= MAX_BLOCK_NUM;
-        return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        // const bool was_blocked = is_p1 ? p1_num_fa_blocked >= MAX_BLOCK_NUM : p2_num_fa_blocked >= MAX_BLOCK_NUM;
+        // return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        return {CHALLENGE, PASS_BLOCK};
     }
     
     if (last_action == BLOCK_STEAL1_AMB || last_action == BLOCK_STEAL2_AMB || 
         last_action == BLOCK_STEAL1_CAP || last_action == BLOCK_STEAL2_CAP) {
-        const bool was_blocked = is_p1 ? p1_num_steal_blocked >= MAX_BLOCK_NUM : p2_num_steal_blocked >= MAX_BLOCK_NUM;
-        return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        // const bool was_blocked = is_p1 ? p1_num_steal_blocked >= MAX_BLOCK_NUM : p2_num_steal_blocked >= MAX_BLOCK_NUM;
+        // return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        return {CHALLENGE, PASS_BLOCK};
     }
     
     if (last_action == BLOCK_ASSASSINATE) {
-        const bool was_blocked = is_p1 ? p1_num_assassinate_blocked >= MAX_BLOCK_NUM : p2_num_assassinate_blocked >= MAX_BLOCK_NUM;
-        return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        // const bool was_blocked = is_p1 ? p1_num_assassinate_blocked >= MAX_BLOCK_NUM : p2_num_assassinate_blocked >= MAX_BLOCK_NUM;
+        // return was_blocked ? std::vector<Action>{CHALLENGE} : std::vector<Action>{CHALLENGE, PASS_BLOCK};
+        return {CHALLENGE, PASS_BLOCK};
     }
     
     // vs Coup
@@ -240,7 +276,7 @@ std::vector<Action> GameState::get_legal_actions() const {
     if (last_action == CHALLENGE) {
         const Action challenged_action = history[history.size() - 2];
         
-        // Check if we can show a valid card
+        // Choose `SHOW_* over LOSE_*
         for (int i = 0; i < 2; i++) {
             if (my_influence[i] == 0) continue;
             
@@ -280,6 +316,7 @@ std::vector<Action> GameState::get_legal_actions() const {
         return get_card_losing_actions(my_cards, my_influence);
     }
     
+    std::cout << last_action;
     assert(false && "Invalid state in get_legal_actions()");
 }
 
@@ -453,11 +490,10 @@ void GameState::apply_action(Action action) {
     const bool is_p1 = (current_player == 0);
     int& my_coins = is_p1 ? p1_coins : p2_coins;
     int& opp_coins = is_p1 ? p2_coins : p1_coins;
-    int& opp_fa_blocked = is_p1 ? p2_num_fa_blocked : p1_num_fa_blocked;
-    int& opp_steal_blocked = is_p1 ? p2_num_steal_blocked : p1_num_steal_blocked;
-    int& opp_assassinate_blocked = is_p1 ? p2_num_assassinate_blocked : p1_num_assassinate_blocked;
+
     std::array<int, 2>& my_influence = is_p1 ? p1_influence : p2_influence;
     
+    // Apply changes coins and cards
     switch (action) {
         case INCOME:
             my_coins += 1;
@@ -495,11 +531,9 @@ void GameState::apply_action(Action action) {
             
         case BLOCK_FOREIGN_AID:
             opp_coins -= 2;
-            opp_fa_blocked += 1;
             break;
             
         case BLOCK_ASSASSINATE:
-            opp_assassinate_blocked += 1;
             break;
             
         case LOSE_ASSASSIN:
@@ -530,11 +564,52 @@ void GameState::apply_action(Action action) {
             // Actions that don't modify state: CHALLENGE, PASS_BLOCK, SHOW_*
             break;
     }
-    
-    // Update block counters for steal blocks
-    if (action == BLOCK_STEAL1_AMB || action == BLOCK_STEAL2_AMB ||
-        action == BLOCK_STEAL1_CAP || action == BLOCK_STEAL2_CAP) {
-        opp_steal_blocked += 1;
+
+    // Apply changes to count variables
+    switch (action) {
+        case TAX:
+        case BLOCK_FOREIGN_AID:
+            if (is_p1) num_p1_has_claimed_duke++;
+            else num_p2_has_claimed_duke++;
+            break;
+        case STEAL1:
+        case STEAL2:
+        case BLOCK_STEAL1_AMB:
+        case BLOCK_STEAL1_CAP:
+        case BLOCK_STEAL2_AMB:
+        case BLOCK_STEAL2_CAP:
+            if (is_p1) num_p1_has_claimed_steal_blocker++;
+            else num_p2_has_claimed_steal_blocker++;
+            break;
+        case BLOCK_ASSASSINATE:
+            if (is_p1) num_p1_has_claimed_contessa++;
+            else num_p2_has_claimed_contessa++;
+            break;
+        default:
+            break;
+    }
+
+    if (history.size() >= 2) {
+        int& my_num_allowed_foreign_aid = is_p1 ? p1_num_allowed_foreign_aid : p2_num_allowed_foreign_aid;
+        int& my_num_allowed_steal = is_p1 ? p1_num_allowed_steal : p2_num_allowed_steal;
+        int& my_num_allowed_assassinate = is_p1 ? p1_num_allowed_assassinate : p2_num_allowed_assassinate;
+        const Action prev_action = history[history.size() - 2];
+        // ALLOW FOREIGN AID
+        if (prev_action == FOREIGN_AID && action != BLOCK_FOREIGN_AID) {
+            my_num_allowed_foreign_aid++;
+        }
+        // ALLOW STEAL1
+        else if (prev_action == STEAL1 && action != BLOCK_STEAL1_CAP && action != BLOCK_STEAL1_AMB && action != CHALLENGE) {
+            my_num_allowed_steal++;
+        }
+        // ALLOW STEAL2
+        else if (prev_action == STEAL2 && action != BLOCK_STEAL2_CAP && action != BLOCK_STEAL2_AMB && action != CHALLENGE) {
+            my_num_allowed_steal++;
+        }
+        // ALLOW ASSASSINATE
+        if (prev_action == ASSASSINATE && action != BLOCK_ASSASSINATE && action != CHALLENGE) {
+            my_num_allowed_assassinate++;
+        }
     }
     
     current_player = 1 - current_player;
@@ -544,13 +619,9 @@ void GameState::undo_action() {
     const Action last_action = history.back();
     history.pop_back();
     current_player = 1 - current_player;
-    
     const bool is_p1 = (current_player == 0);
     int& my_coins = is_p1 ? p1_coins : p2_coins;
     int& opp_coins = is_p1 ? p2_coins : p1_coins;
-    int& opp_fa_blocked = is_p1 ? p2_num_fa_blocked : p1_num_fa_blocked;
-    int& opp_steal_blocked = is_p1 ? p2_num_steal_blocked : p1_num_steal_blocked;
-    int& opp_assassinate_blocked = is_p1 ? p2_num_assassinate_blocked : p1_num_assassinate_blocked;
     std::array<int, 2>& my_influence = is_p1 ? p1_influence : p2_influence;
     
     switch (last_action) {
@@ -590,11 +661,9 @@ void GameState::undo_action() {
             
         case BLOCK_FOREIGN_AID:
             opp_coins += 2;
-            opp_fa_blocked -= 1;
             break;
             
         case BLOCK_ASSASSINATE:
-            opp_assassinate_blocked -= 1;
             break;
             
         case LOSE_ASSASSIN:
@@ -625,11 +694,52 @@ void GameState::undo_action() {
             // Actions that don't modify state: CHALLENGE, PASS_BLOCK, SHOW_*
             break;
     }
-    
-    // Update block counters for steal blocks
-    if (last_action == BLOCK_STEAL1_AMB || last_action == BLOCK_STEAL2_AMB ||
-        last_action == BLOCK_STEAL1_CAP || last_action == BLOCK_STEAL2_CAP) {
-        opp_steal_blocked -= 1;
+
+    // Undo changes for count variables
+    switch (last_action) {
+        case TAX:
+        case BLOCK_FOREIGN_AID:
+            if (is_p1) num_p1_has_claimed_duke--;
+            else num_p2_has_claimed_duke--;
+            break;
+        case STEAL1:
+        case STEAL2:
+        case BLOCK_STEAL1_AMB:
+        case BLOCK_STEAL1_CAP:
+        case BLOCK_STEAL2_AMB:
+        case BLOCK_STEAL2_CAP:
+            if (is_p1) num_p1_has_claimed_steal_blocker--;
+            else num_p2_has_claimed_steal_blocker--;
+            break;
+        case BLOCK_ASSASSINATE:
+            if (is_p1) num_p1_has_claimed_contessa--;
+            else num_p2_has_claimed_contessa--;
+            break;
+        default:
+            break;
+    }
+
+    if (history.size() >= 1) {
+        int& my_num_allowed_foreign_aid = !is_p1 ? p2_num_allowed_foreign_aid : p1_num_allowed_foreign_aid;
+        int& my_num_allowed_steal = !is_p1 ? p2_num_allowed_steal : p1_num_allowed_steal;
+        int& my_num_allowed_assassinate = is_p1 ? p2_num_allowed_assassinate : p1_num_allowed_assassinate;
+        const Action prev_action = history[history.size() - 1];
+        // ALLOW FOREIGN AID
+        if (prev_action == FOREIGN_AID && last_action != BLOCK_FOREIGN_AID) {
+            my_num_allowed_foreign_aid--;
+        }
+        // ALLOW STEAL1
+        else if (prev_action == STEAL1 && last_action != BLOCK_STEAL1_CAP && last_action != BLOCK_STEAL1_AMB && last_action != CHALLENGE) {
+            my_num_allowed_steal--;
+        }
+        // ALLOW STEAL2
+        else if (prev_action == STEAL2 && last_action != BLOCK_STEAL2_CAP && last_action != BLOCK_STEAL2_AMB && last_action != CHALLENGE) {
+            my_num_allowed_steal--;
+        }
+        // ALLOW ASSASSINATE
+        else if (prev_action == ASSASSINATE && last_action != BLOCK_ASSASSINATE && last_action != CHALLENGE) {
+            my_num_allowed_assassinate--;
+        }
     }
 }
 
@@ -678,7 +788,15 @@ std::string GameState::get_infoset_string() const {
 }
 
 
-// For debugging
+// FOR DEBUGGING
+void GameState::print_history() const {
+    std::cout << "History: ";
+    for (Action a : history) {
+        std::cout << ACTION_NAMES[a] << " ";
+    }
+    std::cout << std::endl;
+}
+
 void GameState::print_game_state() const {
     std::cout << "Current player: " << current_player << std::endl;
     std::cout << "P1 Cards: " << p1_cards[0] << (p1_influence[0] == 1 ? "(ALIVE) " : "(DEAD) ") <<
@@ -689,11 +807,8 @@ void GameState::print_game_state() const {
     std::cout << "P1 Coins: " << p1_coins << std::endl;
     std::cout << "P2 Coins: " << p2_coins << std::endl;
 
-    std::cout << "History: ";
-    for (Action a : history) {
-        std::cout << ACTION_NAMES[a] << " ";
-    }
-    std::cout << std::endl;
+    print_history();
+    
     std::cout << "Possible actions: ";
     for (Action a : get_legal_actions()) {
         std::cout << ACTION_NAMES[a] << " ";
@@ -702,7 +817,6 @@ void GameState::print_game_state() const {
     std::cout << std::endl;
 }
 
-// For debugging
 std::string GameState::get_game_state() const {
     std::string output_string = "";
     
@@ -734,13 +848,22 @@ std::string GameState::get_game_state() const {
         output_string += " ";
     }
 
-    output_string += "\nBlock count variables: ";
-    output_string += std::to_string(p1_num_assassinate_blocked) + " ";
-    output_string += std::to_string(p2_num_assassinate_blocked) + " ";
-    output_string += std::to_string(p1_num_steal_blocked) + " ";
-    output_string += std::to_string(p2_num_steal_blocked) + " ";
-    output_string += std::to_string(p1_num_fa_blocked) + " ";
-    output_string += std::to_string(p2_num_fa_blocked);
+    output_string += "\nLIKELY RULE#1 count variables: ";
+    output_string += std::to_string(p1_num_allowed_foreign_aid) + " ";
+    output_string += std::to_string(p1_num_allowed_steal) + " ";
+    output_string += std::to_string(p1_num_allowed_assassinate) + " ";
+    output_string += std::to_string(p2_num_allowed_foreign_aid) + " ";
+    output_string += std::to_string(p2_num_allowed_steal) + " ";
+    output_string += std::to_string(p2_num_allowed_assassinate) + " ";
+
+    output_string += "\nLIKELY RULE#2 count variables: ";
+    output_string += std::to_string(num_p1_has_claimed_duke) + " ";
+    output_string += std::to_string(num_p1_has_claimed_steal_blocker) + " ";
+    output_string += std::to_string(num_p1_has_claimed_contessa) + " ";
+    output_string += std::to_string(num_p2_has_claimed_duke) + " ";
+    output_string += std::to_string(num_p2_has_claimed_steal_blocker) + " ";
+    output_string += std::to_string(num_p2_has_claimed_contessa) + " ";
+
     output_string += "\n\n";
     
     return output_string;

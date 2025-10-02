@@ -6,12 +6,17 @@
 #include <random>
 #include <unordered_map>
 
+int MAX_HISTORY_SIZE = 0;
+
+
 class Solver {
 public:
     std::unordered_map<size_t, std::vector<double>> regret_sum;
     std::unordered_map<size_t, std::vector<double>> strategy_sum;
     std::unordered_map<size_t, std::vector<Action>> next_actions;
     std::unordered_map<size_t, std::string> hash_to_string;
+
+    int cfr_count = 0;
     
     double current_utility = 0.0;
 
@@ -64,6 +69,13 @@ public:
     }
 
     double cfr(GameState& g, double p1_reach, double p2_reach) {
+        // FOR DEBUGGING
+        // cfr_count++;
+        // if (g.history.size() >= MAX_HISTORY_SIZE) {
+        //     g.print_history();
+        //     return 0;
+        // }
+
         if (g.is_terminal()) {
             return g.get_utility();
         }
@@ -198,6 +210,11 @@ public:
         for (size_t i = 0; i < iterations; i++) {
             // Shuffle card pool
             std::shuffle(card_pool.begin(), card_pool.end(), gen);
+
+            // FOR DEBUGGING
+            card_pool = {
+                ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR, 
+            };
             
             // Deal first two cards to players
             GameState g;
@@ -299,10 +316,53 @@ public:
         std::cout << "P2 exploitability: " << p2_exploitability << std::endl;
     }
 };
-
+/*
 int main() {
     Solver solver = Solver();
+
+    MAX_HISTORY_SIZE = 2;
     solver.train(1);
+    std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    solver.cfr_count = 0;
+
+
+    // FOR DEBUGGING
+    // MAX_HISTORY_SIZE = 1;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
+    // MAX_HISTORY_SIZE = 3;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
+    // MAX_HISTORY_SIZE = 5;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
+    // MAX_HISTORY_SIZE = 7;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+    
+    // MAX_HISTORY_SIZE = 9;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
+    // MAX_HISTORY_SIZE = 11;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
+    // MAX_HISTORY_SIZE = 13;
+    // solver.train(1);
+    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
+    // solver.cfr_count = 0;
+
     // solver.calculate_exploitability();
     return 0;
 }
+*/
