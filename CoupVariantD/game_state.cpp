@@ -24,12 +24,12 @@ GameState::GameState() {
     num_p2_has_allowed_tax = 0;
 
     // MOST LIKELY #6 + LIKELY #1
-    num_p1_allowed_foreign_aid = 0;
-    num_p2_allowed_foreign_aid = 0;
-    num_p1_allowed_steal = 0;
-    num_p2_allowed_steal = 0;
-    num_p1_allowed_assassinate = 0;
-    num_p2_allowed_assassinate = 0;
+    num_p1_has_allowed_foreign_aid = 0;
+    num_p2_has_allowed_foreign_aid = 0;
+    num_p1_has_allowed_steal = 0;
+    num_p2_has_allowed_steal = 0;
+    num_p1_has_allowed_assassinate = 0;
+    num_p2_has_allowed_assassinate = 0;
 
     // LIKELY #2
     num_p1_has_claimed_duke = 0;
@@ -156,7 +156,6 @@ std::vector<Action> GameState::get_legal_actions() const {
         if (must_coup()) return {COUP};
         
         std::vector<Action> actions = {INCOME};
-
         // ENFORCE RULE: LIKELY #2
         if (opp_lives == 2) {
             // Do NOT FA when opponent has claimed DUKE
@@ -178,12 +177,33 @@ std::vector<Action> GameState::get_legal_actions() const {
             if (is_p1 && num_p2_has_claimed_contessa > 0) ;
             else if (!is_p1 && num_p1_has_claimed_contessa > 0) ;
             else if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
-        } else {
+        } 
+        else {
             actions.push_back(FOREIGN_AID);
             actions.push_back(TAX);
             if (opp_coins == 1) actions.push_back(STEAL1);
             else if (opp_coins >= 2) actions.push_back(STEAL2);
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
+        }
+
+        // ENFORCE RULE: MOST LIKELY #6
+        if (my_lives + opp_lives == 4) {
+            if (is_p1) {
+                if (num_p2_has_allowed_tax || num_p2_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                } else if (num_p2_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            } else {
+                if (num_p1_has_allowed_tax || num_p1_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                }
+                else if (num_p1_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            }
         }
         
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
@@ -219,9 +239,29 @@ std::vector<Action> GameState::get_legal_actions() const {
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         }
 
+        // ENFORCE RULE: MOST LIKELY #6
+        if (my_lives + opp_lives == 4) {
+            if (is_p1) {
+                if (num_p2_has_allowed_tax || num_p2_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                } else if (num_p2_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            } else {
+                if (num_p1_has_allowed_tax || num_p1_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                }
+                else if (num_p1_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            }
+        }
+
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
         // ENFORCE RULE: LIKELY #1
-        const bool player_has_allowed_fa = is_p1 ? num_p1_allowed_foreign_aid : num_p2_allowed_foreign_aid;
+        const bool player_has_allowed_fa = is_p1 ? num_p1_has_allowed_foreign_aid : num_p2_has_allowed_foreign_aid;
         if (!player_has_allowed_fa) actions.push_back(BLOCK_FOREIGN_AID);
         return actions;
     }
@@ -249,6 +289,26 @@ std::vector<Action> GameState::get_legal_actions() const {
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         }
 
+        // ENFORCE RULE: MOST LIKELY #6
+        if (my_lives + opp_lives == 4) {
+            if (is_p1) {
+                if (num_p2_has_allowed_tax || num_p2_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                } else if (num_p2_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            } else {
+                if (num_p1_has_allowed_tax || num_p1_has_allowed_steal) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                    actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
+                }
+                else if (num_p1_has_allowed_foreign_aid) {
+                    actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
+                }
+            }
+        }
+
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
         actions.push_back(CHALLENGE);
         return actions;
@@ -256,9 +316,9 @@ std::vector<Action> GameState::get_legal_actions() const {
     // vs Steal 1
     if (last_action == STEAL1) {
         // ENFORCE RULE: LIKELY #1
-        const bool player_has_allowed_steal = is_p1 ? num_p1_allowed_steal : num_p2_allowed_steal;
+        const bool player_has_has_allowed_steal = is_p1 ? num_p1_has_allowed_steal : num_p2_has_allowed_steal;
         // ENFORCE RULE: MOST LIKELY #2 (NO INCOME, FA, STEAL vs STEAL)
-        if (!player_has_allowed_steal) return {TAX, BLOCK_STEAL1_AMB, BLOCK_STEAL1_CAP, CHALLENGE};
+        if (!player_has_has_allowed_steal) return {TAX, BLOCK_STEAL1_AMB, BLOCK_STEAL1_CAP, CHALLENGE};
         return {TAX, CHALLENGE};
     }
     // vs Steal 2
@@ -283,8 +343,8 @@ std::vector<Action> GameState::get_legal_actions() const {
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
 
         // ENFORCE RULE: LIKELY #1 
-        const bool player_has_allowed_steal = is_p1 ? num_p1_allowed_steal : num_p2_allowed_steal;
-        if (!player_has_allowed_steal) {
+        const bool player_has_has_allowed_steal = is_p1 ? num_p1_has_allowed_steal : num_p2_has_allowed_steal;
+        if (!player_has_has_allowed_steal) {
             actions.push_back(BLOCK_STEAL2_AMB);
             actions.push_back(BLOCK_STEAL2_CAP);
         }
@@ -295,7 +355,7 @@ std::vector<Action> GameState::get_legal_actions() const {
     // vs Assassinate
     if (last_action == ASSASSINATE) {
         // ENFORCE RULE: LIKELY #1
-        const bool player_has_allowed_assa = is_p1 ? num_p1_allowed_assassinate : num_p2_allowed_assassinate;
+        const bool player_has_allowed_assa = is_p1 ? num_p1_has_allowed_assassinate : num_p2_has_allowed_assassinate;
         if (player_has_allowed_assa) return {CHALLENGE};
         std::vector<Action> actions = {BLOCK_ASSASSINATE, CHALLENGE};
         // RULE: DEFINITELY #2
@@ -773,26 +833,30 @@ void GameState::apply_action(Action action) {
             break;
     }
 
-    // APPLY RULE: LIKELY #1
+    // APPLY RULE: MOST LIKELY #6 + LIKELY #1
     // If current action allows previous STEAL, FA, ASSASINATE
     // Increment current player's num_allowed_action
     if (history.size() >= 2) {
         const Action prev_action = history[history.size() - 2];
         if (prev_action == FOREIGN_AID && action != BLOCK_FOREIGN_AID) {
-            if (is_p1) num_p1_allowed_foreign_aid++;
-            else num_p2_allowed_foreign_aid++;
+            if (is_p1) num_p1_has_allowed_foreign_aid++;
+            else num_p2_has_allowed_foreign_aid++;
         }
         else if (prev_action == STEAL1 && action != BLOCK_STEAL1_CAP && action != BLOCK_STEAL1_AMB && action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_steal++;
-            else num_p2_allowed_steal++;
+            if (is_p1) num_p1_has_allowed_steal++;
+            else num_p2_has_allowed_steal++;
         }
         else if (prev_action == STEAL2 && action != BLOCK_STEAL2_CAP && action != BLOCK_STEAL2_AMB && action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_steal++;
-            else num_p2_allowed_steal++;
+            if (is_p1) num_p1_has_allowed_steal++;
+            else num_p2_has_allowed_steal++;
         }
-        if (prev_action == ASSASSINATE && action != BLOCK_ASSASSINATE && action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_assassinate++;
-            else num_p2_allowed_assassinate++;
+        else if (prev_action == ASSASSINATE && action != BLOCK_ASSASSINATE && action != CHALLENGE) {
+            if (is_p1) num_p1_has_allowed_assassinate++;
+            else num_p2_has_allowed_assassinate++;
+        }
+        else if (prev_action == TAX && action != CHALLENGE) {
+            if (is_p1) num_p1_has_allowed_tax++;
+            else num_p2_has_allowed_tax++;
         }
     }
 
@@ -939,26 +1003,30 @@ void GameState::undo_action() {
             break;
     }
 
-    // UNDO RULE: LIKELY #1
+    // UNDO RULE: MOST LIKELY #6 + LIKELY #1
     // If current action allows previous STEAL, FA, ASSASINATE
     // Decrement current player's num_allowed_action
     if (history.size() >= 1) {
         const Action prev_action = history[history.size() - 1];
         if (prev_action == FOREIGN_AID && last_action != BLOCK_FOREIGN_AID) {
-            if (is_p1) num_p1_allowed_foreign_aid--;
-            else num_p2_allowed_foreign_aid--;
+            if (is_p1) num_p1_has_allowed_foreign_aid--;
+            else num_p2_has_allowed_foreign_aid--;
         }
         else if (prev_action == STEAL1 && last_action != BLOCK_STEAL1_CAP && last_action != BLOCK_STEAL1_AMB && last_action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_steal--;
-            else num_p2_allowed_steal--;
+            if (is_p1) num_p1_has_allowed_steal--;
+            else num_p2_has_allowed_steal--;
         }
         else if (prev_action == STEAL2 && last_action != BLOCK_STEAL2_CAP && last_action != BLOCK_STEAL2_AMB && last_action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_steal--;
-            else num_p2_allowed_steal--;
+            if (is_p1) num_p1_has_allowed_steal--;
+            else num_p2_has_allowed_steal--;
         }
         else if (prev_action == ASSASSINATE && last_action != BLOCK_ASSASSINATE && last_action != CHALLENGE) {
-            if (is_p1) num_p1_allowed_assassinate--;
-            else num_p2_allowed_assassinate--;
+            if (is_p1) num_p1_has_allowed_assassinate--;
+            else num_p2_has_allowed_assassinate--;
+        }
+        else if (prev_action == TAX && last_action != CHALLENGE) {
+            if (is_p1) num_p1_has_allowed_tax--;
+            else num_p2_has_allowed_tax--;
         }
     }
 
@@ -1118,12 +1186,12 @@ std::string GameState::get_game_state() const {
     }
 
     output_string += "\nLIKELY RULE#1 count variables: ";
-    output_string += std::to_string(num_p1_allowed_foreign_aid) + " ";
-    output_string += std::to_string(num_p1_allowed_steal) + " ";
-    output_string += std::to_string(num_p1_allowed_assassinate) + " ";
-    output_string += std::to_string(num_p2_allowed_foreign_aid) + " ";
-    output_string += std::to_string(num_p2_allowed_steal) + " ";
-    output_string += std::to_string(num_p2_allowed_assassinate) + " ";
+    output_string += std::to_string(num_p1_has_allowed_foreign_aid) + " ";
+    output_string += std::to_string(num_p1_has_allowed_steal) + " ";
+    output_string += std::to_string(num_p1_has_allowed_assassinate) + " ";
+    output_string += std::to_string(num_p2_has_allowed_foreign_aid) + " ";
+    output_string += std::to_string(num_p2_has_allowed_steal) + " ";
+    output_string += std::to_string(num_p2_has_allowed_assassinate) + " ";
 
     output_string += "\nLIKELY RULE#2 count variables: ";
     output_string += std::to_string(num_p1_has_claimed_duke) + " ";
