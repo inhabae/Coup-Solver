@@ -6,6 +6,16 @@
 #include <string>
 #include <vector>
 
+const char* const ACTION_NAMES[] = {
+    "INCOME", "FOREIGN_AID", "TAX", "STEAL1", "STEAL2", "ASSASSINATE", "COUP",
+    "BLOCK_FOREIGN_AID", "BLOCK_STEAL1_AMB", "BLOCK_STEAL2_AMB", 
+    "BLOCK_STEAL1_CAP", "BLOCK_STEAL2_CAP", "BLOCK_ASSASSINATE",
+    "CHALLENGE", "PASS_BLOCK",
+    "SHOW_ASSASSIN", "SHOW_AMBASSADOR", "SHOW_CAPTAIN", "SHOW_CONTESSA", "SHOW_DUKE",
+    "LOSE_ASSASSIN", "LOSE_AMBASSADOR", "LOSE_CAPTAIN", "LOSE_CONTESSA", "LOSE_DUKE",
+    "LOSE_BOTH"
+};
+
 enum Action {
   INCOME = 0,
   FOREIGN_AID = 1,
@@ -74,13 +84,17 @@ public:
   int p2_coins;
   std::vector<Action> history;
 
+  // MOST LIKELY #6
+  int num_p1_has_allowed_tax;
+  int num_p2_has_allowed_tax;
+
   // LIKELY #1
-  int p1_num_allowed_foreign_aid;
-  int p1_num_allowed_steal;
-  int p1_num_allowed_assassinate;
-  int p2_num_allowed_foreign_aid;
-  int p2_num_allowed_steal;
-  int p2_num_allowed_assassinate;
+  int num_p1_allowed_foreign_aid;
+  int num_p2_allowed_foreign_aid;
+  int num_p1_allowed_steal;
+  int num_p2_allowed_steal;
+  int num_p1_allowed_assassinate;
+  int num_p2_allowed_assassinate;
 
   // LIKELY #2
   int num_p1_has_claimed_duke;
@@ -99,6 +113,7 @@ public:
   void set_cards(Card, Card, Card, Card);
   void set_my_cards(const std::array<Card, 2>);
   std::vector<Action> get_legal_actions() const;
+  std::vector<Action> get_original_legal_actions() const;
   std::vector<Action> get_card_losing_actions(const std::array<Card, 2>, const std::array<int, 2>) const;
   void lose_card(Card);
   void undo_lose_card(Card);

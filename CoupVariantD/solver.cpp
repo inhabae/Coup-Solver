@@ -1,13 +1,12 @@
 #include "game_state.hpp"
 
 #include <algorithm>
+#include <set>
 #include <cassert>
 #include <iostream>
 #include <random>
 #include <unordered_map>
-
-int MAX_HISTORY_SIZE = 0;
-
+#include <sstream>
 
 class Solver {
 public:
@@ -69,13 +68,6 @@ public:
     }
 
     double cfr(GameState& g, double p1_reach, double p2_reach) {
-        // FOR DEBUGGING
-        // cfr_count++;
-        // if (g.history.size() >= MAX_HISTORY_SIZE) {
-        //     g.print_history();
-        //     return 0;
-        // }
-
         if (g.is_terminal()) {
             return g.get_utility();
         }
@@ -315,54 +307,90 @@ public:
         std::cout << "P1 exploitability: " << p1_exploitability << std::endl;
         std::cout << "P2 exploitability: " << p2_exploitability << std::endl;
     }
-};
-/*
-int main() {
-    Solver solver = Solver();
-
-    MAX_HISTORY_SIZE = 2;
-    solver.train(1);
-    std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    solver.cfr_count = 0;
-
 
     // FOR DEBUGGING
-    // MAX_HISTORY_SIZE = 1;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
+    // Helper function to convert history to string for set storage
+    void collect_histories(GameState& g, std::set<std::string>& histories, 
+                          size_t max_depth, bool use_original) {
+        if (g.history.size() >= max_depth || g.is_terminal()) {
+            histories.insert(history_to_string(g.history));
+            return;
+        }
+        
+        histories.insert(history_to_string(g.history));
+        
+        std::vector<Action> actions = use_original ? 
+            g.get_original_legal_actions() : g.get_legal_actions();
+        
+        for (Action a : actions) {
+            g.apply_action(a);
+            collect_histories(g, histories, max_depth, use_original);
+            g.undo_action();
+        }
+    }
 
-    // MAX_HISTORY_SIZE = 3;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
+    std::string history_to_string(const std::vector<Action>& history) {
+        std::string result;
+        for (Action a : history) {
+            result += std::to_string(a) + ",";
+        }
+        return result;
+    }
 
-    // MAX_HISTORY_SIZE = 5;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
+    void compare_tree_size(size_t max_size) {
+        GameState g1;
+        g1.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
+        std::set<std::string> new_histories, original_histories;
+        
+        collect_histories(g1, new_histories, max_size, false);
+        
+        GameState g2;
+        g2.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
+        collect_histories(g2, original_histories, max_size, true);
+        
+        // Find differences
+        std::set<std::string> only_original;
+        for (const auto& hist : original_histories) {
+            if (new_histories.find(hist) == new_histories.end()) {
+                only_original.insert(hist);
+            }
+        }
+        
+        std::cout << "New method: " << new_histories.size() << " histories" << std::endl;
+        std::cout << "Original method: " << original_histories.size() << " histories" << std::endl;
+        
+        std::cout << "\n=== NEW ACTIONS LIST ONLY ===" << std::endl;
+        std::cout << "Count: " << new_histories.size() << std::endl;
+        for (const auto& hist : new_histories) {
+            std::stringstream ss(hist);
+            std::string token;
+            while (std::getline(ss, token, ',')) {
+                if (!token.empty()) {
+                    std::cout << ACTION_NAMES[std::stoi(token)] << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
+        
+        std::cout << "\n=== OG ACTIONS LIST ONLY ===" << std::endl;
+        std::cout << "Count: " << only_original.size() << std::endl;
+        for (const auto& hist : only_original) {
+            std::stringstream ss(hist);
+            std::string token;
+            while (std::getline(ss, token, ',')) {
+                if (!token.empty()) {
+                    std::cout << ACTION_NAMES[std::stoi(token)] << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
+    }
+};
 
-    // MAX_HISTORY_SIZE = 7;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
-    
-    // MAX_HISTORY_SIZE = 9;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
+// /*
+int main() {
+    Solver solver;
+    solver.compare_tree_size(3);
 
-    // MAX_HISTORY_SIZE = 11;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
-
-    // MAX_HISTORY_SIZE = 13;
-    // solver.train(1);
-    // std::cout << "# cfr() when max depth == " << MAX_HISTORY_SIZE << ": " << solver.cfr_count << std::endl;
-    // solver.cfr_count = 0;
-
-    // solver.calculate_exploitability();
     return 0;
 }
-*/
