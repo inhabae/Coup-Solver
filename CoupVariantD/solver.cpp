@@ -338,6 +338,43 @@ public:
         std::cout << "MAX DEPTH: " << max_depth << " # Histories: " << count_histories(g, 0) << std::endl;
     }
 
+    void get_2v2_tree_size(size_t max_depth) {
+        GameState g;
+        g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
+        
+        std::function<size_t(GameState&, size_t)> count_histories = 
+            [&](GameState& state, size_t current_depth) -> size_t {
+            static size_t test_num = 0;
+
+            // Count current state
+            size_t count = 1;
+            
+            // Stop if we've reached max depth or either player lost an influence
+            if (g.p1_influence[0] + g.p1_influence[1] < 2 || g.p2_influence[0] + g.p2_influence[1] < 2) {
+                return count;
+            }
+            if (current_depth >= max_depth) {
+                if (test_num < 10) {
+                    std::cout << "TEST " << test_num++ << ": ";
+                    g.print_history();
+                }
+                return count;
+            }
+            
+            // Recurse through all legal actions
+            std::vector<Action> actions = state.get_legal_actions();
+            for (Action a : actions) {
+                state.apply_action(a);
+                count += count_histories(state, current_depth + 1);
+                state.undo_action();
+            }
+            
+            return count;
+        };
+        
+        std::cout << "MAX DEPTH: " << max_depth << " # Histories: " << count_histories(g, 0) << std::endl;
+    }
+
     void collect_histories(GameState& g, std::set<std::string>& histories, 
                           size_t max_depth, bool use_original) {
         if (g.history.size() >= max_depth || g.is_terminal()) {
@@ -418,12 +455,16 @@ public:
 int main() {
     Solver solver;
 
-    std::vector<size_t> depths = {3, 5, 9, 11, 13};
-    for (size_t d : depths) {
-        solver.get_tree_size(d);
-    }
+    // std::vector<size_t> depths = {17};
+    // for (size_t d : depths) {
+    //     solver.get_tree_size(d);
+    // }
     
-    // solver.compare_tree_size(3);
+    // solver.compare_tree_size(10);
+
+    solver.get_2v2_tree_size(35);
+
+    // solver.train(1);
 
     return 0;
 }   
