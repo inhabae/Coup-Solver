@@ -362,7 +362,7 @@ std::vector<Action> GameState::get_legal_actions() const {
         if (my_lives == 1) return actions;
         // RULE: MOST LIKELY #3
         if ((my_cards[0] == CONTESSA && my_influence[0] == 1) ||
-            (my_cards[0] == CONTESSA && my_influence[1] == 1)) {
+            (my_cards[1] == CONTESSA && my_influence[1] == 1)) {
                 return actions;
         }
 
