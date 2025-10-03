@@ -87,6 +87,8 @@ public:
   // MOST LIKELY #6
   int num_p1_has_allowed_tax;
   int num_p2_has_allowed_tax;
+  int num_p1_has_allowed_block_fa;
+  int num_p2_has_allowed_block_fa;
 
   // LIKELY #1
   int num_p1_has_allowed_foreign_aid;

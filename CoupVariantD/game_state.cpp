@@ -22,6 +22,8 @@ GameState::GameState() {
     // MOST LIKELY #6
     num_p1_has_allowed_tax = 0;
     num_p2_has_allowed_tax = 0;
+    num_p1_has_allowed_block_fa = 0;
+    num_p2_has_allowed_block_fa = 0;
 
     // MOST LIKELY #6 + LIKELY #1
     num_p1_has_allowed_foreign_aid = 0;
@@ -189,14 +191,14 @@ std::vector<Action> GameState::get_legal_actions() const {
         // ENFORCE RULE: MOST LIKELY #6
         if (my_lives + opp_lives == 4) {
             if (is_p1) {
-                if (num_p2_has_allowed_tax || num_p2_has_allowed_steal) {
+                if (num_p2_has_allowed_tax || num_p2_has_allowed_steal || num_p2_has_allowed_block_fa) {
                     actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
                     actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
                 } else if (num_p2_has_allowed_foreign_aid) {
                     actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
                 }
             } else {
-                if (num_p1_has_allowed_tax || num_p1_has_allowed_steal) {
+                if (num_p1_has_allowed_tax || num_p1_has_allowed_steal || num_p1_has_allowed_block_fa) {
                     actions.erase(std::remove(actions.begin(), actions.end(), INCOME), actions.end());
                     actions.erase(std::remove(actions.begin(), actions.end(), FOREIGN_AID), actions.end());
                 }
@@ -858,6 +860,10 @@ void GameState::apply_action(Action action) {
             if (is_p1) num_p1_has_allowed_tax++;
             else num_p2_has_allowed_tax++;
         }
+        else if (prev_action == BLOCK_FOREIGN_AID && action != CHALLENGE) {
+            if (is_p1) num_p1_has_allowed_block_fa++;
+            else num_p2_has_allowed_block_fa++;
+        }
     }
 
     // APPLY RULE: LIKELY #2
@@ -1027,6 +1033,10 @@ void GameState::undo_action() {
         else if (prev_action == TAX && last_action != CHALLENGE) {
             if (is_p1) num_p1_has_allowed_tax--;
             else num_p2_has_allowed_tax--;
+        }
+        else if (prev_action == BLOCK_FOREIGN_AID && last_action != CHALLENGE) {
+            if (is_p1) num_p1_has_allowed_block_fa--;
+            else num_p2_has_allowed_block_fa--;
         }
     }
 
