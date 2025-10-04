@@ -43,14 +43,20 @@ GameState::GameState() {
 }
 
 bool GameState::is_terminal() const {
-    const bool p1_dead = (p1_influence[0] == 0 && p1_influence[1] == 0);
-    const bool p2_dead = (p2_influence[0] == 0 && p2_influence[1] == 0);
-    return p1_dead || p2_dead;
+    if (p1_influence[0] == 0 && p1_influence[1] == 0) return true;
+    if (p2_influence[0] == 0 && p2_influence[1] == 0) return true;
+    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) return true;
+    return false;
 }
 
 double GameState::get_utility() const {
     const bool p1_dead = (p1_influence[0] == 0 && p1_influence[1] == 0);
     const bool p2_dead = (p2_influence[0] == 0 && p2_influence[1] == 0);
+
+    // Win by CLAIM_MATE
+    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) {
+        return -1.0;
+    }
 
     if (current_player == 0) {
         if (p1_dead) return -1.0;
@@ -64,6 +70,11 @@ double GameState::get_utility() const {
 }
    
 double GameState::get_br_utility(int maximizing_player, std::array<double, NUM_HOLDINGS> cards_distribution) const {
+    // Win by CLAIM_MATE
+    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) {
+        return -1.0;
+    }
+
     const Action prev_action = history[history.size() - 2];
     // Coup
     if (prev_action == COUP) return 1.0;
@@ -145,6 +156,80 @@ std::vector<Action> GameState::get_legal_actions() const {
     const std::array<int, 2> opp_influence = is_p1 ? p2_influence : p1_influence;
     const int my_lives = my_influence[0] + my_influence[1];
     const int opp_lives = opp_influence[0] + opp_influence[1];
+
+    // ENFORCE RULE: DEFINITELY #3
+    // 2v1 Coup-mate scenarios
+    // Free turn
+    if ((my_lives == 2 && opp_lives == 1) && 
+        (last_action <= STEAL2 || last_action == PASS_BLOCK || 
+         (last_action >= LOSE_ASSASSIN && last_action <= LOSE_DUKE))) {
+        // DUKE @
+        if (my_cards[0] == DUKE || my_cards[1] == DUKE) {
+            if (my_coins >= 4) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 3 && opp_coins <= 5) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 2 && opp_coins <= 3) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 1 && opp_coins <= 1) {
+                return {CLAIM_MATE};
+            }
+        }
+        // DUKE CONTESSA
+        if (my_cards[0] == CONTESSA && my_cards[1] == DUKE) {
+            if (my_coins == 3 && opp_coins <= 9) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 2 && opp_coins <= 7) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 1 && opp_coins <= 5) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 0 && opp_coins <= 3) {
+                return {CLAIM_MATE};
+            }
+        }
+        // DUKE SB (CAPTAIN or AMBASSADOR)
+        if ((my_cards[0] == CAPTAIN && my_cards[1] == DUKE) ||
+            (my_cards[0] == AMBASSADOR && my_cards[1] == DUKE)) {
+            if (my_coins >= 0 && opp_coins <= 2) {
+                return {CLAIM_MATE};
+            }
+        }
+        // STEAL BLOCKER (CAPTAIN or AMBASSADOR) @
+        if (my_cards[0] == CAPTAIN || my_cards[1] == CAPTAIN ||
+            my_cards[0] == AMBASSADOR || my_cards[1] == AMBASSADOR) {
+            if (my_coins >= 6) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 5 && opp_coins <= 5) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 4 && opp_coins <= 2) {
+                return {CLAIM_MATE};
+            }
+        }
+        // SB CONTESSA
+        if ((my_cards[0] == CAPTAIN && my_cards[1] == CONTESSA) ||
+            (my_cards[0] == AMBASSADOR && my_cards[1] == CONTESSA)) {
+            if (my_coins == 5 && opp_coins <= 9) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 4 && opp_coins <= 6) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 3 && opp_coins <= 3) {
+                return {CLAIM_MATE};
+            }
+            else if (my_coins == 2 && opp_coins == 0) {
+                return {CLAIM_MATE};
+            }
+        }
+    }
 
     // RULE: DEFINITELY #1
     auto must_coup = [&]() -> bool {

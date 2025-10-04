@@ -13,7 +13,7 @@ const char* const ACTION_NAMES[] = {
     "CHALLENGE", "PASS_BLOCK",
     "SHOW_ASSASSIN", "SHOW_AMBASSADOR", "SHOW_CAPTAIN", "SHOW_CONTESSA", "SHOW_DUKE",
     "LOSE_ASSASSIN", "LOSE_AMBASSADOR", "LOSE_CAPTAIN", "LOSE_CONTESSA", "LOSE_DUKE",
-    "LOSE_BOTH"
+    "LOSE_BOTH", "CLAIM_MATE"
 };
 
 enum Action {
@@ -43,6 +43,7 @@ enum Action {
   LOSE_CONTESSA = 23,
   LOSE_DUKE = 24,
   LOSE_BOTH = 25, // Double assassination
+  CLAIM_MATE = 26 // Claiming Coup Mate
 };
 
 enum Card { ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE };
