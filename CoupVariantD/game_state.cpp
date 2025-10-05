@@ -685,7 +685,6 @@ std::vector<Action> GameState::get_card_losing_actions(const std::array <Card, 2
             case DUKE:       return LOSE_DUKE;
             default:         assert(false && "Invalid card type");
         }
-        return LOSE_ASSASSIN; // Unreachable
     };
     
     // Check card 1
