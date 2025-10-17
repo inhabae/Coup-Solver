@@ -6,6 +6,7 @@
 #include <iostream>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <sstream>
 
 class Solver {
@@ -15,9 +16,11 @@ public:
     std::unordered_map<size_t, std::vector<Action>> next_actions;
     std::unordered_map<size_t, std::string> hash_to_string;
 
-    int cfr_count = 0;
-    
     double current_utility = 0.0;
+
+    // For 2v2 terminal state detection
+    std::unordered_set<size_t> valid_histories;
+    std::unordered_map<size_t, std::vector<Action>> history_map;
 
     Solver() {}
 
@@ -68,14 +71,51 @@ public:
     }
 
     double cfr(GameState& g, double p1_reach, double p2_reach) {
+        if (g.history.size() > 40) {
+            std::cout << g.history.size() << " actions so far\n";
+            g.print_game_state();
+            std::cout << std::endl;
+        }
+        
+        // std::cout << "CFR called\n";
+        // g.print_game_state();
+        // std::cout << std::endl;
+
         if (g.is_terminal()) {
             return g.get_utility();
         }
         
         int player = g.get_current_player();
-        std::vector<Action> actions = g.get_legal_actions();
-        
-        size_t infoset = g.get_hash();
+        std::vector<Action> legal_actions = g.get_legal_actions();
+        std::vector<Action> actions = {};
+
+        // if 2v2, check h+a is in valid_histories
+        if (g.p1_influence[0] + g.p1_influence[1] == 2 && g.p2_influence[0] + g.p2_influence[1] == 2) {
+            for (Action a : legal_actions) {
+                g.apply_action(a);
+                size_t history_hash = g.get_history_hash();
+                g.undo_action();
+                
+                if (valid_histories.find(history_hash) != valid_histories.end()) {
+                    actions.push_back(a);
+                }
+            }
+            if (g.history.size() > 0 && (g.history[g.history.size() - 1] == CHALLENGE || g.history[g.history.size() - 2] == CHALLENGE)) {
+                actions = legal_actions;
+            } else {
+                assert(!actions.empty());
+            }
+        } else {
+            actions = legal_actions;
+        }
+
+        // std::cout << "Legal actions: ";
+        // for (Action a : actions) {
+        //     std::cout << ACTION_NAMES[a] << " ";
+        // }
+        // std::cout << std::endl;
+
+        size_t infoset = g.get_infoset_hash();
 
         // Check for hash collision
         std::string infoset_string = g.get_infoset_string();
@@ -156,10 +196,10 @@ public:
             for (size_t h = 0; h < NUM_HOLDINGS; h++) {
                 g.set_my_cards(holdings[h]);
                 std::vector<Action> legal_actions = g.get_legal_actions();
-                std::vector<double> avg_strategy = get_average_strategy(g.get_hash());
+                std::vector<double> avg_strategy = get_average_strategy(g.get_infoset_hash());
 
                 for (size_t a = 0; a < legal_actions.size(); a++) {
-                    int action_index = legal_actions[a];
+                    int action_index = static_cast<int>(legal_actions[a]);
                     double v = avg_strategy[a] * pair_distribution[h];
                     action_probs[action_index] += v;
                     new_card_distribution[action_index][h] = v;
@@ -203,11 +243,6 @@ public:
             // Shuffle card pool
             std::shuffle(card_pool.begin(), card_pool.end(), gen);
 
-            // FOR DEBUGGING
-            card_pool = {
-                ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR, 
-            };
-            
             // Deal first two cards to players
             GameState g;
             g.set_cards(card_pool[0], card_pool[1], card_pool[2], card_pool[3]);
@@ -217,7 +252,7 @@ public:
             if (i % 10000 == 0 && i != 0) {
                 current_utility = util / i;
                 std::cout << "Iteration #: " << i << " EV: " << util / i << std::endl;
-                calculate_exploitability();
+                // calculate_exploitability();
             }
         }
         
@@ -318,6 +353,13 @@ public:
             [&](GameState& state, size_t current_depth) -> size_t {
             // Count current state
             size_t count = 1;
+            static size_t test_num = 0;
+
+            if (max_depth == current_depth) {
+                if (g.is_terminal() && test_num++ % 1000000 == 0) {
+                    // g.print_history();
+                }
+            }
             
             // Stop if we've reached max depth or terminal state
             if (current_depth >= max_depth || state.is_terminal()) {
@@ -335,7 +377,7 @@ public:
             return count;
         };
         
-        std::cout << "MAX DEPTH: " << max_depth << " # Histories: " << count_histories(g, 0) << std::endl;
+        std::cout << "MAX DEPTH: " << max_depth << " # Histories:\n" << count_histories(g, 0) << std::endl;
     }
 
     void get_2v2_tree_size(size_t max_depth) {
@@ -351,13 +393,17 @@ public:
             
             // Stop if we've reached max depth or either player lost an influence
             if (g.p1_influence[0] + g.p1_influence[1] < 2 || g.p2_influence[0] + g.p2_influence[1] < 2) {
+                
+                if (max_depth == current_depth) {
+                    test_num++;
+                    if (test_num % 1 == 0) {
+                        // g.print_history();
+                    }
+                }
+
                 return count;
             }
             if (current_depth >= max_depth) {
-                if (test_num < 10) {
-                    std::cout << "TEST " << test_num++ << ": ";
-                    g.print_history();
-                }
                 return count;
             }
             
@@ -372,7 +418,7 @@ public:
             return count;
         };
         
-        std::cout << "MAX DEPTH: " << max_depth << " # Histories: " << count_histories(g, 0) << std::endl;
+        std::cout << "MAX DEPTH: " << max_depth << " # Histories:\n" << count_histories(g, 0) << std::endl;
     }
 
     void collect_histories(GameState& g, std::set<std::string>& histories, 
@@ -400,6 +446,101 @@ public:
             result += std::to_string(a) + ",";
         }
         return result;
+    }
+
+    void find_2v2_terminals(GameState& g, size_t move_limit) {
+        // Base case: If we hit the move limit or terminal state, return
+        if (g.history.size() > move_limit) {
+            return;
+        }
+
+        // 2v2-ending action within the move limit -> Store the 2v2 terminal history
+        if (g.history.size() > 0) {
+            if (g.history[g.history.size() - 1] == CHALLENGE || (g.history[g.history.size() - 1] >= LOSE_ASSASSIN && 
+                (g.history[g.history.size() - 1] <= LOSE_BOTH))) {
+                // Get history hash and store the complete history
+                size_t history_hash = g.get_history_hash();
+                
+                // Check for hash collision
+                auto it = history_map.find(history_hash);
+                if (it != history_map.end()) {
+                    if (it->second != g.history) {
+                        assert(false && "Hash collision detected\n");
+                    }
+                } else {
+                    history_map[history_hash] = g.history;
+                }
+                
+                valid_histories.insert(history_hash);
+                return;
+            }
+        }
+
+        std::vector<Action> actions = g.get_legal_actions();
+        
+        for (Action a : actions) {
+            g.apply_action(a);
+            find_2v2_terminals(g, move_limit);
+            g.undo_action();
+        }
+    }
+
+    // Helper function to initialize the search with a specific game state
+    std::unordered_set<size_t> find_all_2v2_terminals(size_t move_limit) {
+        std::unordered_set<size_t> terminal_histories;
+        
+        // First, find all terminal histories
+        for (const auto& holding : holdings) {
+            GameState g;
+            g.set_cards(holding[0], holding[1], holding[0], holding[1]);
+            find_2v2_terminals(g, move_limit);
+        }
+
+        // Store the terminal histories in a separate set
+        terminal_histories = valid_histories;
+        valid_histories.clear();
+
+        // For each terminal history, generate and store all its prefixes
+        for (size_t terminal_hash : terminal_histories) {
+            // Get the history from our stored map
+            const std::vector<Action>& history = history_map[terminal_hash];
+            
+            // Generate and store hashes for all prefixes
+            std::vector<Action> prefix;
+            prefix.reserve(history.size());
+            
+            for (Action a : history) {
+                prefix.push_back(a);
+                size_t prefix_hash = GameState::get_history_hash(prefix);
+                
+                // Check for hash collision on prefixes
+                auto it = history_map.find(prefix_hash);
+                if (it != history_map.end()) {
+                    if (it->second != prefix) {
+                        std::cerr << "Hash collision detected in prefix!" << std::endl;
+                        std::cerr << "Existing prefix: ";
+                        for (const auto& a : it->second) {
+                            std::cerr << ACTION_NAMES[static_cast<int>(a)] << " ";
+                        }
+                        std::cerr << "\nNew prefix: ";
+                        for (const auto& a : prefix) {
+                            std::cerr << ACTION_NAMES[static_cast<int>(a)] << " ";
+                        }
+                        std::cerr << "\nHash value: " << prefix_hash << std::endl;
+                        assert(false && "Hash collision detected in prefix");
+                    }
+                } else {
+                    history_map[prefix_hash] = prefix;
+                }
+                
+                valid_histories.insert(prefix_hash);
+            }
+        }
+
+        // Add the terminal histories back
+        valid_histories.insert(terminal_histories.begin(), terminal_histories.end());
+        
+        return valid_histories;
     }
 
     void compare_tree_size(size_t max_size) {
@@ -455,16 +596,46 @@ public:
 int main() {
     Solver solver;
 
-    // std::vector<size_t> depths = {17};
-    // for (size_t d : depths) {
-    //     solver.get_tree_size(d);
+    auto valid_histories = solver.find_all_2v2_terminals(2);
+    
+    std::cout << "Found " << valid_histories.size() << " total valid histories (terminals + prefixes)" << std::endl;
+    
+    // Debug: Print the actual valid histories
+    // std::cout << "Valid histories:" << std::endl;
+    // for (size_t hash : valid_histories) {
+    //     const auto& history = solver.history_map[hash];
+    //     std::cout << "  ";
+    //     for (Action a : history) {
+    //         std::cout << ACTION_NAMES[static_cast<int>(a)] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    solver.train(1000);  // Reduce for debugging
+
+    // // std::cout << "Sample histories:" << std::endl;
+    // // for (size_t hash : valid_histories) {
+    // //     const auto& history = solver.history_map[hash];
+    // //     for (Action a : history) {
+    // //         std::cout << ACTION_NAMES[static_cast<int>(a)] << " ";
+    // //     }
+    // //     std::cout << std::endl;
+    // // }
+
+    // // Count how many are terminal histories (end in CHALLENGE or LOSE_X)
+    // size_t terminal_count = 0;
+    // for (size_t hash : valid_histories) {
+    //     const auto& history = solver.history_map[hash];
+    //     if (!history.empty()) {
+    //         Action last_action = history.back();
+    //         if (last_action == CHALLENGE || (last_action >= LOSE_ASSASSIN && last_action <= LOSE_BOTH)) {
+    //             terminal_count++;
+    //         }
+    //     }
     // }
     
-    // solver.compare_tree_size(10);
-
-    solver.get_2v2_tree_size(35);
-
-    // solver.train(1);
+    // std::cout << "Of which " << terminal_count << " are terminal histories" << std::endl;
+    // std::cout << "And " << (valid_histories.size() - terminal_count) << " are prefixes" << std::endl;
 
     return 0;
 }   

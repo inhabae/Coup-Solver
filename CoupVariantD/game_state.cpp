@@ -18,6 +18,7 @@ GameState::GameState() {
     p1_coins = 2;
     p2_coins = 2;
     history = {};
+    history.reserve(50);
 
     // MOST LIKELY #6
     num_p1_has_allowed_tax = 0;
@@ -40,46 +41,67 @@ GameState::GameState() {
     num_p2_has_claimed_steal_blocker = 0;
     num_p1_has_claimed_contessa = 0;
     num_p2_has_claimed_contessa = 0;
+
+    // LIKELY #3 - Initialize snapshot variables
+    p1_claims_duke_at_first_loss = -1;
+    p1_claims_steal_blocker_at_first_loss = -1;
+    p1_claims_contessa_at_first_loss = -1;
+    p2_claims_duke_at_first_loss = -1;
+    p2_claims_steal_blocker_at_first_loss = -1;
+    p2_claims_contessa_at_first_loss = -1;
 }
 
 bool GameState::is_terminal() const {
-    if (p1_influence[0] == 0 && p1_influence[1] == 0) return true;
-    if (p2_influence[0] == 0 && p2_influence[1] == 0) return true;
-    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) return true;
-    return false;
+    if ((p1_influence[0] == 0 && p1_influence[1] == 0) ||
+        (p2_influence[0] == 0 && p2_influence[1] == 0))
+        return true;
+
+    return (!history.empty() && history.back() == CLAIM_MATE);
 }
 
 double GameState::get_utility() const {
+
+    // print_game_state();
+    // std::cout << std::endl;
+    // std::cout << std::endl;
+    // std::cout << std::endl;
+
+    assert(is_terminal() && "get_utility() called on a non-terminal game state");
+
+    // CLAIM_MATE means current player loses
+    if (!history.empty() && history.back() == CLAIM_MATE) {
+        return -1.0;
+    }
+
     const bool p1_dead = (p1_influence[0] == 0 && p1_influence[1] == 0);
     const bool p2_dead = (p2_influence[0] == 0 && p2_influence[1] == 0);
 
-    // Win by CLAIM_MATE
-    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) {
-        return -1.0;
-    }
-
     if (current_player == 0) {
-        if (p1_dead) return -1.0;
-        if (p2_dead) return 1.0;
+        return p2_dead ? 1.0 : -1.0;
     } else {
-        if (p1_dead) return 1.0;
-        if (p2_dead) return -1.0;
+        return p1_dead ? 1.0 : -1.0;
     }
-    
-    assert(false && "Invalid state in get_utility(): game not terminal");
 }
    
 double GameState::get_br_utility(int maximizing_player, std::array<double, NUM_HOLDINGS> cards_distribution) const {
-    // Win by CLAIM_MATE
-    if (!history.empty() && history[history.size() - 1] == CLAIM_MATE) {
+    assert(is_terminal() && "get_br_utility() called on a non-terminal game state");
+    
+    // CLAIM_MATE means current player loses
+    if (!history.empty() && history.back() == CLAIM_MATE) {
         return -1.0;
     }
 
-    const Action prev_action = history[history.size() - 2];
+    const size_t hist_size = history.size();
+    assert(history.size() >= 2 && "get_br_utility() called on a non-terminal state with size < 2");
+
+    const Action prev_action = history[hist_size - 2];
     // Coup
     if (prev_action == COUP) return 1.0;
     // Challenge
-    const Action challenged_action = history[history.size() - (history[history.size() - 2] == CHALLENGE ? 3 : 4)];
+    const bool prev_was_challenge = (prev_action == CHALLENGE);
+    const size_t challenged_idx = prev_was_challenge ? (hist_size - 3) : (hist_size - 4);
+    const Action challenged_action = history[challenged_idx];
+
     Card challenged_card;
 
     switch (challenged_action) {
@@ -108,8 +130,8 @@ double GameState::get_br_utility(int maximizing_player, std::array<double, NUM_H
     if (maximizing_player == current_player) {
         const std::array<Card, 2>& current_cards = (current_player == 0) ? p1_cards : p2_cards;
         const std::array<int, 2>& current_influence = (current_player == 0) ? p1_influence : p2_influence;
-        if ((current_influence[0] && current_cards[0] == challenged_card) ||
-            (current_influence[1] && current_cards[1] == challenged_card)) {
+        if ((current_influence[0] == 1 && current_cards[0] == challenged_card) ||
+            (current_influence[1] == 1 && current_cards[1] == challenged_card)) {
             return 1.0;
         }
         return -1.0;
@@ -147,19 +169,21 @@ std::vector<Action> GameState::get_legal_actions() const {
     if (is_terminal()) return {};
     if (history.empty()) return {INCOME, FOREIGN_AID, TAX, STEAL2};
 
-    const Action last_action = history.back();
     const bool is_p1 = (current_player == 0);
     const int my_coins = is_p1 ? p1_coins : p2_coins;
     const int opp_coins = is_p1 ? p2_coins : p1_coins;
-    const std::array<Card, 2> my_cards = is_p1 ? p1_cards : p2_cards;
-    const std::array<int, 2> my_influence = is_p1 ? p1_influence : p2_influence;
-    const std::array<int, 2> opp_influence = is_p1 ? p2_influence : p1_influence;
+    const auto& my_cards      = is_p1 ? p1_cards      : p2_cards;
+    const auto& my_influence  = is_p1 ? p1_influence  : p2_influence;
+    const auto& opp_influence = is_p1 ? p2_influence  : p1_influence;
     const int my_lives = my_influence[0] + my_influence[1];
     const int opp_lives = opp_influence[0] + opp_influence[1];
 
+    
+
+    const Action last_action = history.back();
+
     // ENFORCE RULE: DEFINITELY #3
-    // 2v1 Coup-mate scenarios
-    // Free turn
+    // 2-inf player must be able to initiate the current turn
     if ((my_lives == 2 && opp_lives == 1) && 
         (last_action <= STEAL2 || last_action == PASS_BLOCK || 
          (last_action >= LOSE_ASSASSIN && last_action <= LOSE_DUKE))) {
@@ -265,6 +289,31 @@ std::vector<Action> GameState::get_legal_actions() const {
             else if (!is_p1 && num_p1_has_claimed_contessa > 0) ;
             else if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         } 
+        // ENFORCE RULE: LIKELY #3
+        else if (opp_lives == 1) {
+            // Check if opponent's current claims exceed their snapshot when they lost first influence
+            bool block_duke_actions = false;
+            bool block_steal_actions = false;
+            bool block_contessa_actions = false;
+
+            if (is_p1) {
+                block_duke_actions = (p2_claims_duke_at_first_loss >= 0 && num_p2_has_claimed_duke > p2_claims_duke_at_first_loss);
+                block_steal_actions = (p2_claims_steal_blocker_at_first_loss >= 0 && num_p2_has_claimed_steal_blocker > p2_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p2_claims_contessa_at_first_loss >= 0 && num_p2_has_claimed_contessa > p2_claims_contessa_at_first_loss);
+            } else {
+                block_duke_actions = (p1_claims_duke_at_first_loss >= 0 && num_p1_has_claimed_duke > p1_claims_duke_at_first_loss);
+                block_steal_actions = (p1_claims_steal_blocker_at_first_loss >= 0 && num_p1_has_claimed_steal_blocker > p1_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p1_claims_contessa_at_first_loss >= 0 && num_p1_has_claimed_contessa > p1_claims_contessa_at_first_loss);
+            }
+
+            if (!block_duke_actions) actions.push_back(FOREIGN_AID);
+            actions.push_back(TAX);
+            if (!block_steal_actions) {
+                if (opp_coins == 1) actions.push_back(STEAL1);
+                else if (opp_coins >= 2) actions.push_back(STEAL2);
+            }
+            if (!block_contessa_actions && my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
+        } 
         else {
             actions.push_back(FOREIGN_AID);
             actions.push_back(TAX);
@@ -320,7 +369,29 @@ std::vector<Action> GameState::get_legal_actions() const {
             if (is_p1 && num_p2_has_claimed_contessa > 0) ;
             else if (!is_p1 && num_p1_has_claimed_contessa > 0) ;
             else if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
-        } else {
+        } 
+        // ENFORCE RULE: LIKELY #3
+        else if (opp_lives == 1) {
+            // Check if opponent's current claims exceed their snapshot when they lost first influence
+            bool block_duke_actions = false;
+            bool block_steal_actions = false;
+            bool block_contessa_actions = false;
+
+            if (is_p1) {
+                block_duke_actions = (p2_claims_duke_at_first_loss >= 0 && num_p2_has_claimed_duke > p2_claims_duke_at_first_loss);
+                block_steal_actions = (p2_claims_steal_blocker_at_first_loss >= 0 && num_p2_has_claimed_steal_blocker > p2_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p2_claims_contessa_at_first_loss >= 0 && num_p2_has_claimed_contessa > p2_claims_contessa_at_first_loss);
+            } else {
+                block_duke_actions = (p1_claims_duke_at_first_loss >= 0 && num_p1_has_claimed_duke > p1_claims_duke_at_first_loss);
+                block_steal_actions = (p1_claims_steal_blocker_at_first_loss >= 0 && num_p1_has_claimed_steal_blocker > p1_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p1_claims_contessa_at_first_loss >= 0 && num_p1_has_claimed_contessa > p1_claims_contessa_at_first_loss);
+            }
+
+            if (!block_duke_actions) actions.push_back(FOREIGN_AID);
+            if (!block_steal_actions) actions.push_back(STEAL2);
+            if (!block_contessa_actions && my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
+        } 
+        else {
             actions.push_back(FOREIGN_AID);
             actions.push_back(STEAL2);
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
@@ -349,7 +420,7 @@ std::vector<Action> GameState::get_legal_actions() const {
         if (my_coins >= COIN_TO_COUP) actions.push_back(COUP);
         // ENFORCE RULE: LIKELY #1
         const bool player_has_allowed_fa = is_p1 ? num_p1_has_allowed_foreign_aid : num_p2_has_allowed_foreign_aid;
-        if (!player_has_allowed_fa) actions.push_back(BLOCK_FOREIGN_AID);
+        if (my_lives + opp_lives < 4 || !player_has_allowed_fa) actions.push_back(BLOCK_FOREIGN_AID);
         return actions;
     }
     // vs Tax
@@ -371,7 +442,25 @@ std::vector<Action> GameState::get_legal_actions() const {
             if (is_p1 && num_p2_has_claimed_contessa > 0) ;
             else if (!is_p1 && num_p1_has_claimed_contessa > 0) ;
             else if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
-        } else {
+        } 
+        // ENFORCE RULE: LIKELY #3
+        else if (opp_lives == 1) {
+            // Check if opponent's current claims exceed their snapshot when they lost first influence
+            bool block_steal_actions = false;
+            bool block_contessa_actions = false;
+
+            if (is_p1) {
+                block_steal_actions = (p2_claims_steal_blocker_at_first_loss >= 0 && num_p2_has_claimed_steal_blocker > p2_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p2_claims_contessa_at_first_loss >= 0 && num_p2_has_claimed_contessa > p2_claims_contessa_at_first_loss);
+            } else {
+                block_steal_actions = (p1_claims_steal_blocker_at_first_loss >= 0 && num_p1_has_claimed_steal_blocker > p1_claims_steal_blocker_at_first_loss);
+                block_contessa_actions = (p1_claims_contessa_at_first_loss >= 0 && num_p1_has_claimed_contessa > p1_claims_contessa_at_first_loss);
+            }
+
+            if (!block_steal_actions) actions.push_back(STEAL2);
+            if (!block_contessa_actions && my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
+        } 
+        else {
             actions.push_back(STEAL2);
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         }
@@ -423,7 +512,21 @@ std::vector<Action> GameState::get_legal_actions() const {
             else  {
                 if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
             }
-        } else {
+        } 
+        // ENFORCE RULE: LIKELY #3
+        else if (opp_lives == 1) {
+            // Check if opponent's current claims exceed their snapshot when they lost first influence
+            bool block_contessa_actions = false;
+
+            if (is_p1) {
+                block_contessa_actions = (p2_claims_contessa_at_first_loss >= 0 && num_p2_has_claimed_contessa > p2_claims_contessa_at_first_loss);
+            } else {
+                block_contessa_actions = (p1_claims_contessa_at_first_loss >= 0 && num_p1_has_claimed_contessa > p1_claims_contessa_at_first_loss);
+            }
+
+            if (!block_contessa_actions && my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
+        } 
+        else {
             if (my_coins >= COIN_TO_ASSASSINATE) actions.push_back(ASSASSINATE);
         }
         
@@ -723,6 +826,20 @@ void GameState::lose_card(Card card) {
         assert(false && "lose_card() has no card to lose.");
     }
 
+    // APPLY RULE: LIKELY #3 - Capture snapshot when player loses first influence
+    int my_lives = my_influence[0] + my_influence[1];
+    if (my_lives == 1) { // Just lost first influence (going from 2 to 1 life)
+        if (is_p1) {
+            p1_claims_duke_at_first_loss = num_p1_has_claimed_duke;
+            p1_claims_steal_blocker_at_first_loss = num_p1_has_claimed_steal_blocker;
+            p1_claims_contessa_at_first_loss = num_p1_has_claimed_contessa;
+        } else {
+            p2_claims_duke_at_first_loss = num_p2_has_claimed_duke;
+            p2_claims_steal_blocker_at_first_loss = num_p2_has_claimed_steal_blocker;
+            p2_claims_contessa_at_first_loss = num_p2_has_claimed_contessa;
+        }
+    }
+
     // Challenge resolution
     const size_t hist_size = history.size();
     if (hist_size >= 2 && history[hist_size - 2] == CHALLENGE) {
@@ -770,6 +887,20 @@ void GameState::undo_lose_card(Card card) {
         my_influence[1] = 1;
     } else {
         assert(false && "Undoing lose_card() has gained no card back.");
+    }
+
+    // UNDO RULE: LIKELY #3 - Reset snapshot when undoing first influence loss  
+    int my_lives = my_influence[0] + my_influence[1];
+    if (my_lives == 2) { // Just restored first influence (going from 1 to 2 lives)
+        if (is_p1) {
+            p1_claims_duke_at_first_loss = -1;
+            p1_claims_steal_blocker_at_first_loss = -1;
+            p1_claims_contessa_at_first_loss = -1;
+        } else {
+            p2_claims_duke_at_first_loss = -1;
+            p2_claims_steal_blocker_at_first_loss = -1;
+            p2_claims_contessa_at_first_loss = -1;
+        }
     }
 
     // Undo challenge resolution
@@ -1181,7 +1312,30 @@ void GameState::undo_action() {
 
 }
 
-size_t GameState::get_hash() const {
+size_t GameState::get_history_hash(const std::vector<Action>& hist) {
+    // FNV-1a hash algorithm - fast and good distribution
+    size_t hash = 14695981039346656037ULL; // FNV offset basis
+    constexpr size_t FNV_PRIME = 1099511628211ULL;
+    
+    // Random salt to differentiate from infoset hash
+    hash ^= static_cast<size_t>(10);
+    hash *= FNV_PRIME;
+    hash ^= static_cast<size_t>(10);
+    hash *= FNV_PRIME;
+    
+    for (const Action action : hist) {
+        hash ^= static_cast<size_t>(action);
+        hash *= FNV_PRIME;
+    }
+    
+    return hash;
+}
+
+size_t GameState::get_history_hash() const {
+    return get_history_hash(history);
+}
+
+size_t GameState::get_infoset_hash() const {
     const std::array<Card, 2>& my_cards = (current_player == 0) ? p1_cards : p2_cards;
     
     // FNV-1a hash algorithm - fast and good distribution

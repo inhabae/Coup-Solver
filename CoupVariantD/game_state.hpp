@@ -48,7 +48,7 @@ enum Action {
 
 enum Card { ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE };
 
-const int NUM_ACTIONS = 26;
+const int NUM_ACTIONS = 27;
 const int NUM_HOLDINGS = 15;
 
 const int COIN_TO_ASSASSINATE = 3;
@@ -107,6 +107,14 @@ public:
   int num_p1_has_claimed_contessa;
   int num_p2_has_claimed_contessa;
 
+  // LIKELY #3 - Snapshot variables when each player loses first influence
+  int p1_claims_duke_at_first_loss;
+  int p1_claims_steal_blocker_at_first_loss;
+  int p1_claims_contessa_at_first_loss;
+  int p2_claims_duke_at_first_loss;
+  int p2_claims_steal_blocker_at_first_loss;
+  int p2_claims_contessa_at_first_loss;
+
 public:
   GameState();
   bool is_terminal() const;
@@ -122,8 +130,12 @@ public:
   void undo_lose_card(Card);
   void apply_action(Action);
   void undo_action();
-  size_t get_hash() const;
+  size_t get_history_hash() const;
+  static size_t get_history_hash(const std::vector<Action>& history);
+  size_t get_infoset_hash() const;
   std::string get_infoset_string() const;
+
+  // For debugging
   void print_history() const;
   void print_game_state() const;
   std::string get_game_state() const;
