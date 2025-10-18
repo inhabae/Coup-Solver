@@ -1,30 +1,16 @@
-#include "game_state.hpp"
+#include "trainer.hpp"
 
 #include <algorithm>
-#include <set>
 #include <cassert>
+#include <functional>
 #include <iostream>
 #include <random>
-#include <unordered_map>
-#include <unordered_set>
+#include <set>
 #include <sstream>
 
-class Solver {
-public:
-    std::unordered_map<size_t, std::vector<double>> regret_sum;
-    std::unordered_map<size_t, std::vector<double>> strategy_sum;
-    std::unordered_map<size_t, std::vector<Action>> next_actions;
-    std::unordered_map<size_t, std::string> hash_to_string;
+Trainer::Trainer() : current_utility(0.0) {}
 
-    double current_utility = 0.0;
-
-    // For 2v2 terminal state detection
-    std::unordered_set<size_t> valid_histories;
-    std::unordered_map<size_t, std::vector<Action>> history_map;
-
-    Solver() {}
-
-    std::vector<double> get_strategy(size_t infoset) {
+std::vector<double> Trainer::get_strategy(size_t infoset) {
         const std::vector<double>& regrets = regret_sum[infoset];
         std::vector<double> strategy_vec(regrets.size(), 0.0);
         double regret_total = 0.0;
@@ -46,7 +32,7 @@ public:
         return strategy_vec;
     }
 
-    std::vector<double> get_average_strategy(size_t infoset) {
+std::vector<double> Trainer::get_average_strategy(size_t infoset) {
         std::vector<double> avg_strategy = strategy_sum[infoset];
         double sum = 0.0;
         
@@ -70,11 +56,12 @@ public:
         return avg_strategy;
     }
 
-    double cfr(GameState& g, double p1_reach, double p2_reach) {
+double Trainer::cfr(GameState& g, double p1_reach, double p2_reach) {
         if (g.history.size() > 40) {
             std::cout << g.history.size() << " actions so far\n";
             g.print_game_state();
             std::cout << std::endl;
+            return 0;
         }
         
         // std::cout << "CFR called\n";
@@ -92,7 +79,7 @@ public:
         // if 2v2, check h+a is in valid_histories
         if (g.p1_influence[0] + g.p1_influence[1] == 2 && g.p2_influence[0] + g.p2_influence[1] == 2) {
             for (Action a : legal_actions) {
-                g.apply_action(a);
+                g.do_action(a);
                 size_t history_hash = g.get_history_hash();
                 g.undo_action();
                 
@@ -139,7 +126,7 @@ public:
         
         // Recurse for each action
         for (size_t i = 0; i < actions.size(); i++) {
-            g.apply_action(actions[i]);
+            g.do_action(actions[i]);
             
             double new_p1_reach = (player == 0) ? p1_reach * strategy[i] : p1_reach;
             double new_p2_reach = (player == 1) ? p2_reach * strategy[i] : p2_reach;
@@ -162,7 +149,7 @@ public:
         return node_utility;
     }
 
-    double calculate_best_response(GameState& g, const int max_player, std::array<double, NUM_HOLDINGS> pair_distribution) {
+double Trainer::calculate_best_response(GameState& g, const int max_player, std::array<double, NUM_HOLDINGS> pair_distribution) {
         if (g.is_terminal()) {
             return g.get_br_utility(max_player, pair_distribution);
         }
@@ -173,7 +160,7 @@ public:
             double best_value = -100.0;
             // Action best_action = ASSASSINATE;
             for (size_t a = 0; a < next_actions.size(); a++) {
-                g.apply_action(next_actions[a]);
+                g.do_action(next_actions[a]);
                 double action_utility = -calculate_best_response(g, max_player, pair_distribution);
                 g.undo_action();
                 if (action_utility > best_value) {
@@ -217,7 +204,7 @@ public:
                     p /= action_probs[a];
                 }
 
-                g.apply_action(action);
+                g.do_action(action);
                 double action_utility = -calculate_best_response(g, max_player, normalized_card_dist);
                 g.undo_action();
                 node_utility += action_utility * action_probs[a];
@@ -227,7 +214,7 @@ public:
         assert(false);
     }
 
-    void train(size_t iterations) {
+void Trainer::train(size_t iterations) {
         std::vector<Card> card_pool = {
             ASSASSIN, ASSASSIN, ASSASSIN,
             AMBASSADOR, AMBASSADOR, AMBASSADOR,
@@ -249,19 +236,20 @@ public:
             
             util += cfr(g, 1.0, 1.0);
 
-            if (i % 10000 == 0 && i != 0) {
-                current_utility = util / i;
-                std::cout << "Iteration #: " << i << " EV: " << util / i << std::endl;
-                // calculate_exploitability();
-            }
+            // if (i % 10000 == 0 && i != 0) {
+            //     current_utility = util / i;
+            //     std::cout << "Iteration #: " << i << " EV: " << util / i << std::endl;
+            //     // calculate_exploitability();
+            // }
         }
         
         current_utility = util / iterations;
+        std::cout << "util: " << util << ", iterations: " << iterations << std::endl;
         std::cout << "Average game value: " << util / iterations << std::endl;
     }
 
-    // Convert Card enum to index (0-4)
-    int card_to_index(Card c) {
+// Convert Card enum to index (0-4)
+int Trainer::card_to_index(Card c) {
         switch(c) {
             case ASSASSIN: return 0;
             case AMBASSADOR: return 1;
@@ -272,9 +260,9 @@ public:
         }
     }
 
-    // Calculate pair distribution after removing 2 cards
-    // Returns probabilities in same order as holdings array
-    std::array<double, NUM_HOLDINGS> calculate_pair_distribution(Card removed_card1, Card removed_card2) {
+// Calculate pair distribution after removing 2 cards
+// Returns probabilities in same order as holdings array
+std::array<double, NUM_HOLDINGS> Trainer::calculate_pair_distribution(Card removed_card1, Card removed_card2) {
         std::vector<int> remaining_counts = {3, 3, 3, 3, 3};
         remaining_counts[card_to_index(removed_card1)]--;
         remaining_counts[card_to_index(removed_card2)]--;
@@ -302,8 +290,8 @@ public:
         return pair_distribution;
     }
 
-    // Calculate probability of being dealt a specific pair
-    double calculate_pair_probability(Card card1, Card card2) {
+// Calculate probability of being dealt a specific pair
+double Trainer::calculate_pair_probability(Card card1, Card card2) {
         if (card1 == card2) {
             return 3.0 / 105.0; // comb(3, 2) / C(15, 2)
         } else {
@@ -311,7 +299,7 @@ public:
         }
     }
 
-    void calculate_exploitability() {
+void Trainer::calculate_exploitability() {
         double p1_br_utility = 0.0;
         double p2_br_utility = 0.0;
         
@@ -343,9 +331,9 @@ public:
         std::cout << "P2 exploitability: " << p2_exploitability << std::endl;
     }
 
-    // FOR DEBUGGING
-    // Helper function to convert history to string for set storage
-    void get_tree_size(size_t max_depth) {
+// FOR DEBUGGING
+// Helper function to convert history to string for set storage
+void Trainer::get_tree_size(size_t max_depth) {
         GameState g;
         g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
         
@@ -369,7 +357,7 @@ public:
             // Recurse through all legal actions
             std::vector<Action> actions = state.get_legal_actions();
             for (Action a : actions) {
-                state.apply_action(a);
+                state.do_action(a);
                 count += count_histories(state, current_depth + 1);
                 state.undo_action();
             }
@@ -380,7 +368,7 @@ public:
         std::cout << "MAX DEPTH: " << max_depth << " # Histories:\n" << count_histories(g, 0) << std::endl;
     }
 
-    void get_2v2_tree_size(size_t max_depth) {
+void Trainer::get_2v2_tree_size(size_t max_depth) {
         GameState g;
         g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
         
@@ -410,7 +398,7 @@ public:
             // Recurse through all legal actions
             std::vector<Action> actions = state.get_legal_actions();
             for (Action a : actions) {
-                state.apply_action(a);
+                state.do_action(a);
                 count += count_histories(state, current_depth + 1);
                 state.undo_action();
             }
@@ -421,8 +409,8 @@ public:
         std::cout << "MAX DEPTH: " << max_depth << " # Histories:\n" << count_histories(g, 0) << std::endl;
     }
 
-    void collect_histories(GameState& g, std::set<std::string>& histories, 
-                          size_t max_depth, bool use_original) {
+void Trainer::collect_histories(GameState& g, std::set<std::string>& histories, 
+                      size_t max_depth, bool use_original) {
         if (g.history.size() >= max_depth || g.is_terminal()) {
             histories.insert(history_to_string(g.history));
             return;
@@ -430,17 +418,16 @@ public:
         
         histories.insert(history_to_string(g.history));
         
-        std::vector<Action> actions = use_original ? 
-            g.get_original_legal_actions() : g.get_legal_actions();
+        std::vector<Action> actions = g.get_legal_actions();
         
         for (Action a : actions) {
-            g.apply_action(a);
+            g.do_action(a);
             collect_histories(g, histories, max_depth, use_original);
             g.undo_action();
         }
     }
 
-    std::string history_to_string(const std::vector<Action>& history) {
+std::string Trainer::history_to_string(const std::vector<Action>& history) {
         std::string result;
         for (Action a : history) {
             result += std::to_string(a) + ",";
@@ -448,7 +435,7 @@ public:
         return result;
     }
 
-    void find_2v2_terminals(GameState& g, size_t move_limit) {
+void Trainer::find_2v2_terminals(GameState& g, size_t move_limit) {
         // Base case: If we hit the move limit or terminal state, return
         if (g.history.size() > move_limit) {
             return;
@@ -479,14 +466,14 @@ public:
         std::vector<Action> actions = g.get_legal_actions();
         
         for (Action a : actions) {
-            g.apply_action(a);
+            g.do_action(a);
             find_2v2_terminals(g, move_limit);
             g.undo_action();
         }
     }
 
-    // Helper function to initialize the search with a specific game state
-    std::unordered_set<size_t> find_all_2v2_terminals(size_t move_limit) {
+// Helper function to initialize the search with a specific game state
+std::unordered_set<size_t> Trainer::find_all_2v2_terminals(size_t move_limit) {
         std::unordered_set<size_t> terminal_histories;
         
         // First, find all terminal histories
@@ -543,99 +530,51 @@ public:
         return valid_histories;
     }
 
-    void compare_tree_size(size_t max_size) {
-        GameState g1;
-        g1.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
-        std::set<std::string> new_histories, original_histories;
-        
-        collect_histories(g1, new_histories, max_size, false);
-        
-        GameState g2;
-        g2.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
-        collect_histories(g2, original_histories, max_size, true);
-        
-        // Find differences
-        std::set<std::string> only_original;
-        for (const auto& hist : original_histories) {
-            if (new_histories.find(hist) == new_histories.end()) {
-                only_original.insert(hist);
-            }
-        }
-        
-        std::cout << "New method: " << new_histories.size() << " histories" << std::endl;
-        std::cout << "Original method: " << original_histories.size() << " histories" << std::endl;
-        
-        std::cout << "\n=== NEW ACTIONS LIST ONLY ===" << std::endl;
-        std::cout << "Count: " << new_histories.size() << std::endl;
-        for (const auto& hist : new_histories) {
-            std::stringstream ss(hist);
-            std::string token;
-            while (std::getline(ss, token, ',')) {
-                if (!token.empty()) {
-                    std::cout << ACTION_NAMES[std::stoi(token)] << " ";
-                }
-            }
-            std::cout << std::endl;
-        }
-        
-        std::cout << "\n=== OG ACTIONS LIST ONLY ===" << std::endl;
-        std::cout << "Count: " << only_original.size() << std::endl;
-        for (const auto& hist : only_original) {
-            std::stringstream ss(hist);
-            std::string token;
-            while (std::getline(ss, token, ',')) {
-                if (!token.empty()) {
-                    std::cout << ACTION_NAMES[std::stoi(token)] << " ";
-                }
-            }
-            std::cout << std::endl;
+void Trainer::compare_tree_size(size_t max_size) {
+    GameState g1;
+    g1.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
+    std::set<std::string> new_histories, original_histories;
+    
+    collect_histories(g1, new_histories, max_size, false);
+    
+    GameState g2;
+    g2.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
+    collect_histories(g2, original_histories, max_size, true);
+    
+    // Find differences
+    std::set<std::string> only_original;
+    for (const auto& hist : original_histories) {
+        if (new_histories.find(hist) == new_histories.end()) {
+            only_original.insert(hist);
         }
     }
-};
-
-int main() {
-    Solver solver;
-
-    auto valid_histories = solver.find_all_2v2_terminals(2);
     
-    std::cout << "Found " << valid_histories.size() << " total valid histories (terminals + prefixes)" << std::endl;
+    std::cout << "New method: " << new_histories.size() << " histories" << std::endl;
+    std::cout << "Original method: " << original_histories.size() << " histories" << std::endl;
     
-    // Debug: Print the actual valid histories
-    // std::cout << "Valid histories:" << std::endl;
-    // for (size_t hash : valid_histories) {
-    //     const auto& history = solver.history_map[hash];
-    //     std::cout << "  ";
-    //     for (Action a : history) {
-    //         std::cout << ACTION_NAMES[static_cast<int>(a)] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-
-    solver.train(1000);  // Reduce for debugging
-
-    // // std::cout << "Sample histories:" << std::endl;
-    // // for (size_t hash : valid_histories) {
-    // //     const auto& history = solver.history_map[hash];
-    // //     for (Action a : history) {
-    // //         std::cout << ACTION_NAMES[static_cast<int>(a)] << " ";
-    // //     }
-    // //     std::cout << std::endl;
-    // // }
-
-    // // Count how many are terminal histories (end in CHALLENGE or LOSE_X)
-    // size_t terminal_count = 0;
-    // for (size_t hash : valid_histories) {
-    //     const auto& history = solver.history_map[hash];
-    //     if (!history.empty()) {
-    //         Action last_action = history.back();
-    //         if (last_action == CHALLENGE || (last_action >= LOSE_ASSASSIN && last_action <= LOSE_BOTH)) {
-    //             terminal_count++;
-    //         }
-    //     }
-    // }
+    std::cout << "\n=== NEW ACTIONS LIST ONLY ===" << std::endl;
+    std::cout << "Count: " << new_histories.size() << std::endl;
+    for (const auto& hist : new_histories) {
+        std::stringstream ss(hist);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            if (!token.empty()) {
+                std::cout << ACTION_NAMES[std::stoi(token)] << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
     
-    // std::cout << "Of which " << terminal_count << " are terminal histories" << std::endl;
-    // std::cout << "And " << (valid_histories.size() - terminal_count) << " are prefixes" << std::endl;
-
-    return 0;
-}   
+    std::cout << "\n=== OG ACTIONS LIST ONLY ===" << std::endl;
+    std::cout << "Count: " << only_original.size() << std::endl;
+    for (const auto& hist : only_original) {
+        std::stringstream ss(hist);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            if (!token.empty()) {
+                std::cout << ACTION_NAMES[std::stoi(token)] << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
+}

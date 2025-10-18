@@ -2,7 +2,7 @@
 #define GAME_STATE_HPP
 
 #include <array>
-#include <cstddef>
+#include <cstddef> // for size_t
 #include <string>
 #include <vector>
 
@@ -48,14 +48,6 @@ enum Action {
 
 enum Card { ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE };
 
-const int NUM_ACTIONS = 27;
-const int NUM_HOLDINGS = 15;
-
-const int COIN_TO_ASSASSINATE = 3;
-const int COIN_TO_COUP = 7;
-const int COIN_TO_MUST_COUP = 10;
-const int MAX_BLOCK_NUM = 2;
-
 const std::array<std::array<Card, 2>, 15> holdings = {{
     {ASSASSIN, ASSASSIN},
     {ASSASSIN, AMBASSADOR},
@@ -73,6 +65,14 @@ const std::array<std::array<Card, 2>, 15> holdings = {{
     {CONTESSA, DUKE},
     {DUKE, DUKE}
 }};
+
+const int NUM_ACTIONS = 27;
+const int NUM_HOLDINGS = 15;
+const int COIN_TO_ASSASSINATE = 3;
+const int COIN_TO_COUP = 7;
+const int COIN_TO_MUST_COUP = 10;
+
+using ActionMask = uint32_t; // 32-bit bitmask where each bit corresponds to an Action enum value
 
 class GameState {
 public:
@@ -117,6 +117,7 @@ public:
 
 public:
   GameState();
+  void reset();
   bool is_terminal() const;
   double get_utility() const;
   double get_br_utility(int, std::array<double, NUM_HOLDINGS>) const;
@@ -124,11 +125,36 @@ public:
   void set_cards(Card, Card, Card, Card);
   void set_my_cards(const std::array<Card, 2>);
   std::vector<Action> get_legal_actions() const;
-  std::vector<Action> get_original_legal_actions() const;
-  std::vector<Action> get_card_losing_actions(const std::array<Card, 2>, const std::array<int, 2>) const;
+  std::vector<Action> get_card_losing_actions(const std::array<Card, 2>&, const std::array<int, 2>&) const;
+  
+
+  bool has_allowed_foreign_aid() const;
+  bool has_allowed_steal() const;
+  bool has_allowed_assassinate() const;
+
+  bool has_opponent_allowed_tax() const;
+  bool has_opponent_allowed_foreign_aid() const;
+  bool has_opponent_allowed_steal() const;
+
+  bool has_opponent_claimed_duke_2v2(bool is_p1) const;
+  bool has_opponent_claimed_steal_blocker_2v2(bool is_p1) const;
+  bool has_opponent_claimed_contessa_2v2(bool is_p1) const;
+
+  bool has_opponent_claimed_duke_xv1(bool is_p1) const;
+  bool has_opponent_claimed_steal_blocker_xv1(bool is_p1) const;
+  bool has_opponent_claimed_contessa_xv1(bool is_p1) const;
+
+  bool is_free_turn() const;
+
+  // Mask helper: OR losing-card bits into legal_mask (no return)
+  void set_card_losing_bits(const std::array<Card, 2>&, const std::array<int, 2>&, ActionMask&) const;
+  
+  // Rule enforcement helpers
+  bool can_2v1_coupmate(int my_coins, int opp_coins, const std::array<Card, 2>& my_cards) const;
+  
   void lose_card(Card);
   void undo_lose_card(Card);
-  void apply_action(Action);
+  void do_action(Action);
   void undo_action();
   size_t get_history_hash() const;
   static size_t get_history_hash(const std::vector<Action>& history);
@@ -138,7 +164,7 @@ public:
   // For debugging
   void print_history() const;
   void print_game_state() const;
-  std::string get_game_state() const;
+  std::string get_game_state() const; // for comparing two game states (e.g., testing do/undo)
 };
 
 #endif
