@@ -231,7 +231,7 @@ void Trainer::train(size_t iterations) {
             std::shuffle(card_pool.begin(), card_pool.end(), gen);
 
             // Deal first two cards to players
-            GameState g;
+            GameState g(RulesConfig::solver_default());
             g.set_cards(card_pool[0], card_pool[1], card_pool[2], card_pool[3]);
             
             util += cfr(g, 1.0, 1.0);
@@ -310,7 +310,7 @@ void Trainer::calculate_exploitability() {
             std::array<double, NUM_HOLDINGS> pair_distribution = calculate_pair_distribution(card1, card2);
             
             for (int p = 0; p < 2; p++) {
-                GameState g;
+                GameState g(RulesConfig::solver_default());
                 g.set_cards(card1, card2, ASSASSIN, ASSASSIN);
                 double v = calculate_best_response(g, p, pair_distribution) * calculate_pair_probability(card1, card2);
                 if (p == 0) {
@@ -334,7 +334,7 @@ void Trainer::calculate_exploitability() {
 // FOR DEBUGGING
 // Helper function to convert history to string for set storage
 void Trainer::get_tree_size(size_t max_depth) {
-        GameState g;
+        GameState g(RulesConfig::solver_default());
         g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
         
         std::function<size_t(GameState&, size_t)> count_histories = 
@@ -369,7 +369,7 @@ void Trainer::get_tree_size(size_t max_depth) {
     }
 
 void Trainer::get_2v2_tree_size(size_t max_depth) {
-        GameState g;
+        GameState g(RulesConfig::solver_default());
         g.set_cards(ASSASSIN, ASSASSIN, ASSASSIN, AMBASSADOR);
         
         std::function<size_t(GameState&, size_t)> count_histories = 
@@ -478,7 +478,7 @@ std::unordered_set<size_t> Trainer::find_all_2v2_terminals(size_t move_limit) {
         
         // First, find all terminal histories
         for (const auto& holding : holdings) {
-            GameState g;
+            GameState g(RulesConfig::solver_default());
             g.set_cards(holding[0], holding[1], holding[0], holding[1]);
             find_2v2_terminals(g, move_limit);
         }

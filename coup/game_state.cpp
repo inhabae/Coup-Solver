@@ -9,7 +9,23 @@ static inline ActionMask action_bit(Action a) noexcept {
     return (static_cast<ActionMask>(1u) << static_cast<unsigned>(a));
 }
 
+RulesConfig RulesConfig::solver_default() {
+    return RulesConfig{};
+}
+
+RulesConfig RulesConfig::baseline_default() {
+    RulesConfig config;
+    config.pruning.enabled = false;
+    config.extensions.claim_mate_enabled = false;
+    return config;
+}
+
 GameState::GameState() {
+    rules_config = RulesConfig::solver_default();
+    reset();
+}
+
+GameState::GameState(const RulesConfig& config) : rules_config(config) {
     reset();
 }
 
@@ -24,13 +40,13 @@ void GameState::reset() {
     history = {};
     history.reserve(50);
 
-    // MOST LIKELY #6
+    // Pruning heuristic state: prior accepted stronger actions.
     num_p1_has_allowed_tax = 0;
     num_p2_has_allowed_tax = 0;
     num_p1_has_allowed_block_fa = 0;
     num_p2_has_allowed_block_fa = 0;
 
-    // MOST LIKELY #6 + LIKELY #1
+    // Pruning heuristic state: prior accepted actions.
     num_p1_has_allowed_foreign_aid = 0;
     num_p2_has_allowed_foreign_aid = 0;
     num_p1_has_allowed_steal = 0;
@@ -38,7 +54,7 @@ void GameState::reset() {
     num_p1_has_allowed_assassinate = 0;
     num_p2_has_allowed_assassinate = 0;
 
-    // LIKELY #2
+    // Pruning heuristic state: prior public claims.
     num_p1_has_claimed_duke = 0;
     num_p2_has_claimed_duke = 0;
     num_p1_has_claimed_steal_blocker = 0;
@@ -46,7 +62,7 @@ void GameState::reset() {
     num_p1_has_claimed_contessa = 0;
     num_p2_has_claimed_contessa = 0;
 
-    // LIKELY #3 - Initialize snapshot variables
+    // Pruning heuristic snapshots.
     p1_claims_duke_at_first_loss = -1;
     p1_claims_steal_blocker_at_first_loss = -1;
     p1_claims_contessa_at_first_loss = -1;
@@ -153,6 +169,14 @@ int GameState::get_current_player() const {
     return current_player;
 }
 
+void GameState::set_rules_config(const RulesConfig& config) {
+    rules_config = config;
+}
+
+const RulesConfig& GameState::get_rules_config() const {
+    return rules_config;
+}
+
 void GameState::set_cards(Card p1_card1, Card p1_card2, Card p2_card1, Card p2_card2) {
     auto [p1_min, p1_max] = std::minmax(p1_card1, p1_card2);
     auto [p2_min, p2_max] = std::minmax(p2_card1, p2_card2);
@@ -241,7 +265,7 @@ bool GameState::can_2v1_coupmate(int my_coins, int opp_coins, const std::array<C
     return false;
 }
 
-// MOST LIKELY #6
+// Pruning helper: prior accepted stronger actions.
 bool GameState::has_opponent_allowed_tax() const {
     if (current_player == 0) {
         return num_p2_has_allowed_tax > 0;
@@ -266,7 +290,7 @@ bool GameState::has_opponent_allowed_steal() const {
     }   
 }
 
-// LIKELY #1
+// Pruning helper: prior accepted actions.
 bool GameState::has_allowed_foreign_aid() const {
     if (current_player == 0) {
         return num_p1_has_allowed_foreign_aid > 0;
@@ -275,7 +299,7 @@ bool GameState::has_allowed_foreign_aid() const {
     }
 }
 
-// LIKELY #1
+// Pruning helper: prior accepted actions.
 bool GameState::has_allowed_steal() const {
     if (current_player == 0) {
         return num_p1_has_allowed_steal > 0;
@@ -284,7 +308,7 @@ bool GameState::has_allowed_steal() const {
     }
 }
 
-// LIKELY #1
+// Pruning helper: prior accepted actions.
 bool GameState::has_allowed_assassinate() const {
     if (current_player == 0) {
         return num_p1_has_allowed_assassinate > 0;
@@ -293,7 +317,7 @@ bool GameState::has_allowed_assassinate() const {
     }
 }   
 
-// LIKELY #2
+// Pruning helper: public claim history in 2v2.
 bool GameState::has_opponent_claimed_duke_2v2(bool is_p1) const {
     if (is_p1) {
         return num_p2_has_claimed_duke > 0;
@@ -302,7 +326,7 @@ bool GameState::has_opponent_claimed_duke_2v2(bool is_p1) const {
     }
 }
 
-// LIKELY #2
+// Pruning helper: public claim history in 2v2.
 bool GameState::has_opponent_claimed_steal_blocker_2v2(bool is_p1) const {
     if (is_p1) {
         return num_p2_has_claimed_steal_blocker > 0;
@@ -311,7 +335,7 @@ bool GameState::has_opponent_claimed_steal_blocker_2v2(bool is_p1) const {
     }
 }
 
-// LIKELY #2
+// Pruning helper: public claim history in 2v2.
 bool GameState::has_opponent_claimed_contessa_2v2(bool is_p1) const {
     if (is_p1) {
         return num_p2_has_claimed_contessa > 0;
@@ -320,7 +344,7 @@ bool GameState::has_opponent_claimed_contessa_2v2(bool is_p1) const {
     }
 }
 
-// LIKELY #3
+// Pruning helper: post-first-loss claim history.
 bool GameState::has_opponent_claimed_duke_xv1(bool is_p1) const {
     if (is_p1) {
         return (p2_claims_duke_at_first_loss >= 0 && 
@@ -331,7 +355,7 @@ bool GameState::has_opponent_claimed_duke_xv1(bool is_p1) const {
     }
 }
 
-// LIKELY #3
+// Pruning helper: post-first-loss claim history.
 bool GameState::has_opponent_claimed_steal_blocker_xv1(bool is_p1) const {
     if (is_p1) {
         return (p2_claims_steal_blocker_at_first_loss >= 0 && 
@@ -342,7 +366,7 @@ bool GameState::has_opponent_claimed_steal_blocker_xv1(bool is_p1) const {
     }
 }
 
-// LIKELY #3
+// Pruning helper: post-first-loss claim history.
 bool GameState::has_opponent_claimed_contessa_xv1(bool is_p1) const {
     if (is_p1) {
         return (p2_claims_contessa_at_first_loss >= 0 && 
@@ -360,172 +384,226 @@ bool GameState::is_free_turn() const {
             (last_action >= LOSE_ASSASSIN && last_action <= LOSE_DUKE));
 }
 
-std::vector<Action> GameState::get_legal_actions() const {
-    if (is_terminal()) return {};
-    if (history.empty()) return {INCOME, FOREIGN_AID, TAX, STEAL2};
+void GameState::add_primary_turn_actions(ActionMask& legal_mask, int my_coins, int opp_coins) const {
+    legal_mask |= action_bit(INCOME);
+    legal_mask |= action_bit(FOREIGN_AID);
+    legal_mask |= action_bit(TAX);
+    if (opp_coins >= 2) legal_mask |= action_bit(STEAL2);
+    else if (opp_coins == 1) legal_mask |= action_bit(STEAL1);
+    if (my_coins >= COIN_TO_ASSASSINATE) legal_mask |= action_bit(ASSASSINATE);
+    if (my_coins >= COIN_TO_COUP) legal_mask |= action_bit(COUP);
+}
+
+ActionMask GameState::build_baseline_legal_mask() const {
+    if (is_terminal()) return 0;
 
     const bool is_p1 = (current_player == 0);
     const int my_coins = is_p1 ? p1_coins : p2_coins;
     const int opp_coins = is_p1 ? p2_coins : p1_coins;
-    const auto& my_cards      = is_p1 ? p1_cards      : p2_cards;
-    const auto& my_influence  = is_p1 ? p1_influence  : p2_influence;
-    const auto& opp_influence = is_p1 ? p2_influence  : p1_influence;
-    const int my_num_lives = my_influence[0] + my_influence[1];
-    const int opp_num_lives = opp_influence[0] + opp_influence[1];
+    const auto& my_cards = is_p1 ? p1_cards : p2_cards;
+    const auto& my_influence = is_p1 ? p1_influence : p2_influence;
+
+    if (history.empty()) {
+        ActionMask legal_mask = 0;
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
+        return legal_mask;
+    }
+
     const Action last_action = history.back();
-
-    if (is_free_turn()) {
-        // ENFORCE RULE: DEFINITELY #1
-        if (my_coins >= COIN_TO_COUP && opp_num_lives == 1) {
-            return {COUP};
-        }
-        // ENFORCE RULE: DEFINITELY #3
-        if (my_num_lives == 2 && opp_num_lives == 1) {
-            if (can_2v1_coupmate(my_coins, opp_coins, my_cards)) {
-                return {CLAIM_MATE};
-            }
-        }
-    }
-    
     ActionMask legal_mask = 0;
-    
-    // vs Income / Pass Block / Lose Card
-    if (last_action == INCOME || last_action == PASS_BLOCK || 
+
+    if (last_action == INCOME || last_action == PASS_BLOCK ||
         (last_action >= LOSE_ASSASSIN && last_action <= LOSE_DUKE)) {
-        if (my_coins >= COIN_TO_MUST_COUP) return {COUP};
-        
-        legal_mask |= action_bit(INCOME);
-        legal_mask |= action_bit(FOREIGN_AID);
-        legal_mask |= action_bit(TAX);
-        if (opp_coins >= 2) legal_mask |= action_bit(STEAL2);
-        else if (opp_coins == 1) legal_mask |= action_bit(STEAL1);
-        if (my_coins >= COIN_TO_ASSASSINATE) legal_mask |= action_bit(ASSASSINATE);
-        if (my_coins >= COIN_TO_COUP) legal_mask |= action_bit(COUP);
+        if (my_coins >= COIN_TO_MUST_COUP) return action_bit(COUP);
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
     }
-    // vs Foreign Aid
     else if (last_action == FOREIGN_AID) {
-        if (my_coins >= COIN_TO_MUST_COUP) return {COUP, BLOCK_FOREIGN_AID};
-
-        legal_mask |= action_bit(INCOME);
-        legal_mask |= action_bit(FOREIGN_AID);
-        // ENFORCE RULE: MOST LIKELY #4 (NO TAX vs FOREIGN_AID)
-        legal_mask |= action_bit(STEAL2);
-        if (my_coins >= COIN_TO_ASSASSINATE) legal_mask |= action_bit(ASSASSINATE);
-        if (my_coins >= COIN_TO_COUP) legal_mask |= action_bit(COUP);
-        if (!has_allowed_foreign_aid()) legal_mask |= action_bit(BLOCK_FOREIGN_AID);
+        if (my_coins >= COIN_TO_MUST_COUP) return action_bit(COUP) | action_bit(BLOCK_FOREIGN_AID);
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
+        legal_mask |= action_bit(BLOCK_FOREIGN_AID);
     }
-    // vs Tax
     else if (last_action == TAX) {
-        if (my_coins >= COIN_TO_MUST_COUP) return {COUP, CHALLENGE};
-
-        legal_mask |= action_bit(INCOME);
-        // ENFORCE RULE: MOST LIKELY #5 (NO FA vs TAX)
-        legal_mask |= action_bit(TAX);
-        legal_mask |= action_bit(STEAL2);
-        if (my_coins >= COIN_TO_ASSASSINATE) legal_mask |= action_bit(ASSASSINATE);
-        if (my_coins >= COIN_TO_COUP) legal_mask |= action_bit(COUP);
+        if (my_coins >= COIN_TO_MUST_COUP) return action_bit(COUP) | action_bit(CHALLENGE);
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
         legal_mask |= action_bit(CHALLENGE);
     }
-    // vs Steal 1
     else if (last_action == STEAL1) {
-        // ENFORCE RULE: MOST LIKELY #2 (NO INCOME, FA, STEAL vs STEAL)
-        legal_mask |= action_bit(TAX);
-        if (!has_allowed_steal()) {
-            legal_mask |= action_bit(BLOCK_STEAL1_AMB);
-            legal_mask |= action_bit(BLOCK_STEAL1_CAP);
-        }
+        // This engine does not model an explicit "allow steal" action or a formal phase enum.
+        // By design, taking a normal turn action here also serves as implicitly allowing the steal.
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
+        legal_mask |= action_bit(BLOCK_STEAL1_AMB);
+        legal_mask |= action_bit(BLOCK_STEAL1_CAP);
         legal_mask |= action_bit(CHALLENGE);
     }
-    // vs Steal 2
     else if (last_action == STEAL2) {
-        if (my_coins >= COIN_TO_MUST_COUP) return {COUP, CHALLENGE};
-
-        // ENFORCE RULE: MOST LIKELY #2 (NO INCOME, FA, STEAL vs STEAL)
-        legal_mask |= action_bit(TAX);
-        if (my_coins >= COIN_TO_ASSASSINATE) legal_mask |= action_bit(ASSASSINATE);
-        if (my_coins >= COIN_TO_COUP) legal_mask |= action_bit(COUP);
-        if (!has_allowed_steal()) {
-            legal_mask |= action_bit(BLOCK_STEAL2_AMB);
-            legal_mask |= action_bit(BLOCK_STEAL2_CAP);
-        }
+        if (my_coins >= COIN_TO_MUST_COUP) return action_bit(COUP) | action_bit(CHALLENGE);
+        // This engine does not model an explicit "allow steal" action or a formal phase enum.
+        // By design, taking a normal turn action here also serves as implicitly allowing the steal.
+        add_primary_turn_actions(legal_mask, my_coins, opp_coins);
+        legal_mask |= action_bit(BLOCK_STEAL2_AMB);
+        legal_mask |= action_bit(BLOCK_STEAL2_CAP);
         legal_mask |= action_bit(CHALLENGE);
     }
-    
-    // vs Assassinate
     else if (last_action == ASSASSINATE) {
-        // ENFORCE RULE: DEFINITELY #2 (Cannot lose card with one influence left)
+        const int my_num_lives = my_influence[0] + my_influence[1];
         if (my_num_lives == 1) {
-            return {BLOCK_ASSASSINATE, CHALLENGE};
+            return action_bit(BLOCK_ASSASSINATE) | action_bit(CHALLENGE);
         }
 
-        // ENFORCE RULE: DEFINITELY #3 (Cannot lose with CONTESSA in hand)
-        if ((my_cards[0] == CONTESSA && my_influence[0] > 0) || (my_cards[1] == CONTESSA && my_influence[1] > 0)) {
-            return {BLOCK_ASSASSINATE, CHALLENGE};
+        const bool has_live_contessa =
+            (my_cards[0] == CONTESSA && my_influence[0] > 0) ||
+            (my_cards[1] == CONTESSA && my_influence[1] > 0);
+        if (has_live_contessa) {
+            return action_bit(BLOCK_ASSASSINATE) | action_bit(CHALLENGE);
         }
 
-        if (!has_allowed_assassinate()) {
-            legal_mask |= action_bit(BLOCK_ASSASSINATE);
-        }
+        legal_mask |= action_bit(BLOCK_ASSASSINATE);
         legal_mask |= action_bit(CHALLENGE);
-
         set_card_losing_bits(my_cards, my_influence, legal_mask);
     }
-    
-    // vs Blocks
     else if (last_action >= BLOCK_FOREIGN_AID && last_action <= BLOCK_ASSASSINATE) {
-        return {CHALLENGE, PASS_BLOCK};
+        return action_bit(CHALLENGE) | action_bit(PASS_BLOCK);
     }
-    
-    // vs Coup
     else if (last_action == COUP) {
         set_card_losing_bits(my_cards, my_influence, legal_mask);
     }
-    
-    // vs Challenge
     else if (last_action == CHALLENGE) {
         const Action challenged_action = history[history.size() - 2];
-        
-        // RULE: MOST LIKELY #1
+
         for (int i = 0; i < 2; i++) {
             if (my_influence[i] == 0) continue;
             const Card card = my_cards[i];
             if (card == DUKE && (challenged_action == TAX || challenged_action == BLOCK_FOREIGN_AID)) {
-                return {SHOW_DUKE};
+                return action_bit(SHOW_DUKE);
             }
             if (card == ASSASSIN && challenged_action == ASSASSINATE) {
-                return {SHOW_ASSASSIN};
+                return action_bit(SHOW_ASSASSIN);
             }
             if (card == CONTESSA && challenged_action == BLOCK_ASSASSINATE) {
-                return {SHOW_CONTESSA};
+                return action_bit(SHOW_CONTESSA);
             }
-            if (card == CAPTAIN && (challenged_action == STEAL1 || challenged_action == STEAL2 || 
+            if (card == CAPTAIN && (challenged_action == STEAL1 || challenged_action == STEAL2 ||
                                     challenged_action == BLOCK_STEAL1_CAP || challenged_action == BLOCK_STEAL2_CAP)) {
-                return {SHOW_CAPTAIN};
+                return action_bit(SHOW_CAPTAIN);
             }
             if (card == AMBASSADOR && (challenged_action == BLOCK_STEAL1_AMB || challenged_action == BLOCK_STEAL2_AMB)) {
-                return {SHOW_AMBASSADOR};
+                return action_bit(SHOW_AMBASSADOR);
             }
         }
-        
-        // Double assassination
-        if (my_num_lives == 2 && challenged_action == BLOCK_ASSASSINATE) {
-            return {LOSE_BOTH};
+
+        if ((my_influence[0] + my_influence[1]) == 2 && challenged_action == BLOCK_ASSASSINATE) {
+            return action_bit(LOSE_BOTH);
         }
-        
+
         set_card_losing_bits(my_cards, my_influence, legal_mask);
     }
-    
-    // vs Show card
     else if (last_action >= SHOW_ASSASSIN && last_action <= SHOW_DUKE) {
-        // Double assassination
-        if (my_num_lives == 2 && last_action == SHOW_ASSASSIN) {
-            return {LOSE_BOTH};
+        if ((my_influence[0] + my_influence[1]) == 2 && last_action == SHOW_ASSASSIN) {
+            return action_bit(LOSE_BOTH);
         }
         set_card_losing_bits(my_cards, my_influence, legal_mask);
     }
 
-    // Apply rules
-    // ENFORCE RULE: LIKELY #2
+    return legal_mask;
+}
+
+bool GameState::can_force_coup_vs_one_influence() const {
+    if (!is_free_turn()) return false;
+
+    const bool is_p1 = (current_player == 0);
+    const int my_coins = is_p1 ? p1_coins : p2_coins;
+    const auto& opp_influence = is_p1 ? p2_influence : p1_influence;
+    const int opp_num_lives = opp_influence[0] + opp_influence[1];
+    return my_coins >= COIN_TO_COUP && opp_num_lives == 1;
+}
+
+bool GameState::can_force_claim_mate() const {
+    if (!rules_config.extensions.claim_mate_enabled || !is_free_turn()) return false;
+
+    const bool is_p1 = (current_player == 0);
+    const int my_coins = is_p1 ? p1_coins : p2_coins;
+    const int opp_coins = is_p1 ? p2_coins : p1_coins;
+    const auto& my_cards = is_p1 ? p1_cards : p2_cards;
+    const auto& my_influence = is_p1 ? p1_influence : p2_influence;
+    const auto& opp_influence = is_p1 ? p2_influence : p1_influence;
+
+    const int my_num_lives = my_influence[0] + my_influence[1];
+    const int opp_num_lives = opp_influence[0] + opp_influence[1];
+    return my_num_lives == 2 && opp_num_lives == 1 && can_2v1_coupmate(my_coins, opp_coins, my_cards);
+}
+
+ActionMask GameState::apply_pruning_heuristics(ActionMask legal_mask) const {
+    if (!rules_config.pruning.enabled || legal_mask == 0) return legal_mask;
+
+    const bool is_p1 = (current_player == 0);
+    const int my_coins = is_p1 ? p1_coins : p2_coins;
+    const auto& my_cards = is_p1 ? p1_cards : p2_cards;
+    const auto& my_influence = is_p1 ? p1_influence : p2_influence;
+    const auto& opp_influence = is_p1 ? p2_influence : p1_influence;
+    const int my_num_lives = my_influence[0] + my_influence[1];
+    const int opp_num_lives = opp_influence[0] + opp_influence[1];
+
+    if (can_force_coup_vs_one_influence()) {
+        return action_bit(COUP);
+    }
+
+    if (can_force_claim_mate()) {
+        return action_bit(CLAIM_MATE);
+    }
+
+    if (!history.empty()) {
+        const Action last_action = history.back();
+
+        if (last_action == FOREIGN_AID) {
+            legal_mask &= ~action_bit(TAX);
+            if (has_allowed_foreign_aid()) legal_mask &= ~action_bit(BLOCK_FOREIGN_AID);
+        }
+        else if (last_action == TAX) {
+            legal_mask &= ~action_bit(FOREIGN_AID);
+        }
+        else if (last_action == STEAL1) {
+            legal_mask &= ~action_bit(INCOME);
+            legal_mask &= ~action_bit(FOREIGN_AID);
+            legal_mask &= ~action_bit(STEAL1);
+            legal_mask &= ~action_bit(STEAL2);
+            legal_mask &= ~action_bit(ASSASSINATE);
+            legal_mask &= ~action_bit(COUP);
+            if (has_allowed_steal()) {
+                legal_mask &= ~action_bit(BLOCK_STEAL1_AMB);
+                legal_mask &= ~action_bit(BLOCK_STEAL1_CAP);
+            }
+        }
+        else if (last_action == STEAL2) {
+            legal_mask &= ~action_bit(INCOME);
+            legal_mask &= ~action_bit(FOREIGN_AID);
+            legal_mask &= ~action_bit(STEAL1);
+            legal_mask &= ~action_bit(STEAL2);
+            if (my_coins >= COIN_TO_MUST_COUP) {
+                legal_mask &= ~action_bit(ASSASSINATE);
+            }
+            if (has_allowed_steal()) {
+                legal_mask &= ~action_bit(BLOCK_STEAL2_AMB);
+                legal_mask &= ~action_bit(BLOCK_STEAL2_CAP);
+            }
+        }
+        else if (last_action == ASSASSINATE) {
+            if (my_num_lives == 1) {
+                return action_bit(BLOCK_ASSASSINATE) | action_bit(CHALLENGE);
+            }
+
+            const bool has_live_contessa =
+                (my_cards[0] == CONTESSA && my_influence[0] > 0) ||
+                (my_cards[1] == CONTESSA && my_influence[1] > 0);
+            if (has_live_contessa) {
+                return action_bit(BLOCK_ASSASSINATE) | action_bit(CHALLENGE);
+            }
+
+            if (has_allowed_assassinate()) {
+                legal_mask &= ~action_bit(BLOCK_ASSASSINATE);
+            }
+        }
+    }
+
     if (my_num_lives == 2 && opp_num_lives == 2) {
         if (has_opponent_claimed_steal_blocker_2v2(is_p1)) {
             legal_mask &= ~action_bit(STEAL1);
@@ -538,7 +616,7 @@ std::vector<Action> GameState::get_legal_actions() const {
             legal_mask &= ~action_bit(ASSASSINATE);
         }
     }
-    // ENFORCE RULE: LIKELY #3
+
     if (opp_num_lives == 1) {
         if (has_opponent_claimed_steal_blocker_xv1(is_p1)) {
             legal_mask &= ~action_bit(STEAL1);
@@ -552,25 +630,34 @@ std::vector<Action> GameState::get_legal_actions() const {
         }
     }
 
-    // ENFORCE RULE: MOST LIKELY #6
     if (my_num_lives == 2 && opp_num_lives == 2) {
         if (has_opponent_allowed_tax() && ((legal_mask & action_bit(TAX)) != 0)) {
             legal_mask &= ~action_bit(FOREIGN_AID);
             legal_mask &= ~action_bit(INCOME);
-        } 
+        }
         else if (has_opponent_allowed_steal() && ((legal_mask & action_bit(STEAL2)) != 0)) {
             legal_mask &= ~action_bit(FOREIGN_AID);
             legal_mask &= ~action_bit(INCOME);
-        } 
+        }
         else if (has_opponent_allowed_steal() && ((legal_mask & action_bit(STEAL1)) != 0)) {
             legal_mask &= ~action_bit(INCOME);
-        } 
+        }
         else if (has_opponent_allowed_foreign_aid() && ((legal_mask & action_bit(FOREIGN_AID)) != 0)) {
             legal_mask &= ~action_bit(INCOME);
         }
     }
 
-    // Convert legal_mask to vector of Actions
+    return legal_mask;
+}
+
+ActionMask GameState::add_extension_actions(ActionMask legal_mask) const {
+    if (rules_config.extensions.claim_mate_enabled && can_force_claim_mate()) {
+        legal_mask |= action_bit(CLAIM_MATE);
+    }
+    return legal_mask;
+}
+
+std::vector<Action> GameState::actions_from_mask(ActionMask legal_mask) const {
     std::vector<Action> legal_actions;
     for (unsigned a = 0; a < NUM_ACTIONS; a++) {
         if (legal_mask & action_bit(static_cast<Action>(a))) {
@@ -578,6 +665,13 @@ std::vector<Action> GameState::get_legal_actions() const {
         }
     }
     return legal_actions;
+}
+
+std::vector<Action> GameState::get_legal_actions() const {
+    ActionMask legal_mask = build_baseline_legal_mask();
+    legal_mask = apply_pruning_heuristics(legal_mask);
+    legal_mask = add_extension_actions(legal_mask);
+    return actions_from_mask(legal_mask);
 }
 
 void GameState::set_card_losing_bits(const std::array<Card, 2>& player_cards,
@@ -627,7 +721,7 @@ void GameState::lose_card(Card card) {
         assert(false && "lose_card() has no card to lose.");
     }
 
-    // APPLY RULE: LIKELY #3 - Capture snapshot when player loses first influence
+    // Capture pruning snapshot when a player loses first influence.
     int my_num_lives = my_influence[0] + my_influence[1];
     if (my_num_lives == 1) { // Just lost first influence (going from 2 to 1 life)
         if (is_p1) {
@@ -690,7 +784,7 @@ void GameState::undo_lose_card(Card card) {
         assert(false && "Undoing lose_card() has gained no card back.");
     }
 
-    // UNDO RULE: LIKELY #3 - Reset snapshot when undoing first influence loss  
+    // Reset pruning snapshot when undoing first influence loss.
     int my_num_lives = my_influence[0] + my_influence[1];
     if (my_num_lives == 2) { // Just restored first influence (going from 1 to 2 lives)
         if (is_p1) {
@@ -735,15 +829,12 @@ void GameState::undo_lose_card(Card card) {
     }
 }
 
-void GameState::do_action(Action action) {
-    history.push_back(action);
+void GameState::apply_baseline_action(Action action) {
     const bool is_p1 = (current_player == 0);
     int& my_coins = is_p1 ? p1_coins : p2_coins;
     int& opp_coins = is_p1 ? p2_coins : p1_coins;
-
     std::array<int, 2>& my_influence = is_p1 ? p1_influence : p2_influence;
-    
-    // Apply changes coins and cards
+
     switch (action) {
         case INCOME:
             my_coins += 1;
@@ -810,15 +901,27 @@ void GameState::do_action(Action action) {
             my_influence[0] = 0;
             my_influence[1] = 0;
             break;
-            
+
         default:
-            // Actions that don't modify state: CHALLENGE, PASS_BLOCK, SHOW_*
+            // Actions that don't modify baseline state: CHALLENGE, PASS_BLOCK, SHOW_*
             break;
     }
+}
 
-    // APPLY RULE: LIKELY #2
-    // If current action is card-claiming action
-    // Increment current player's claim count
+void GameState::apply_extension_action(Action action) {
+    if (action == CLAIM_MATE) {
+        assert(rules_config.extensions.claim_mate_enabled && "CLAIM_MATE used while extension is disabled");
+    }
+}
+
+void GameState::do_action(Action action) {
+    history.push_back(action);
+    apply_baseline_action(action);
+    apply_extension_action(action);
+
+    const bool is_p1 = (current_player == 0);
+
+    // Update pruning claim trackers.
     switch (action) {
         case TAX:
         case BLOCK_FOREIGN_AID:
@@ -842,9 +945,7 @@ void GameState::do_action(Action action) {
             break;
     }
 
-    // APPLY RULE: MOST LIKELY #6 + LIKELY #1
-    // If current action allows previous STEAL, FA, ASSASINATE
-    // Increment current player's num_allowed_action
+    // Update pruning "allowed action" trackers.
     if (history.size() >= 2) {
         const Action prev_action = history[history.size() - 2];
         if (prev_action == FOREIGN_AID && action != BLOCK_FOREIGN_AID) {
@@ -873,9 +974,7 @@ void GameState::do_action(Action action) {
         }
     }
 
-    // APPLY RULE: LIKELY #2
-    // When card-claiming action is challenged
-    // Decrement opponent's claim count
+    // Update pruning claim trackers on challenge.
     if (action == CHALLENGE) {
         const Action prev_action = history[history.size() - 2];
         switch (prev_action) {
@@ -917,14 +1016,97 @@ void GameState::do_action(Action action) {
             }
         }
     } 
-    
+
     current_player = 1 - current_player;
+}
+
+void GameState::undo_baseline_action(Action last_action) {
+    const bool is_p1 = (current_player == 0);
+    int& my_coins = is_p1 ? p1_coins : p2_coins;
+    int& opp_coins = is_p1 ? p2_coins : p1_coins;
+    std::array<int, 2>& my_influence = is_p1 ? p1_influence : p2_influence;
+
+    switch (last_action) {
+        case INCOME:
+            my_coins -= 1;
+            break;
+
+        case FOREIGN_AID:
+            my_coins -= 2;
+            break;
+
+        case TAX:
+            my_coins -= 3;
+            break;
+
+        case STEAL1:
+        case BLOCK_STEAL1_AMB:
+        case BLOCK_STEAL1_CAP:
+            my_coins -= 1;
+            opp_coins += 1;
+            break;
+
+        case STEAL2:
+        case BLOCK_STEAL2_AMB:
+        case BLOCK_STEAL2_CAP:
+            my_coins -= 2;
+            opp_coins += 2;
+            break;
+
+        case ASSASSINATE:
+            my_coins += COIN_TO_ASSASSINATE;
+            break;
+
+        case COUP:
+            my_coins += COIN_TO_COUP;
+            break;
+
+        case BLOCK_FOREIGN_AID:
+            opp_coins += 2;
+            break;
+
+        case BLOCK_ASSASSINATE:
+            break;
+
+        case LOSE_ASSASSIN:
+            undo_lose_card(ASSASSIN);
+            break;
+
+        case LOSE_AMBASSADOR:
+            undo_lose_card(AMBASSADOR);
+            break;
+
+        case LOSE_CAPTAIN:
+            undo_lose_card(CAPTAIN);
+            break;
+
+        case LOSE_CONTESSA:
+            undo_lose_card(CONTESSA);
+            break;
+
+        case LOSE_DUKE:
+            undo_lose_card(DUKE);
+            break;
+
+        case LOSE_BOTH:
+            my_influence = {1, 1};
+            break;
+
+        default:
+            break;
+    }
+}
+
+void GameState::undo_extension_action(Action last_action) {
+    if (last_action == CLAIM_MATE) {
+        assert(rules_config.extensions.claim_mate_enabled && "CLAIM_MATE undone while extension is disabled");
+    }
 }
 
 void GameState::undo_action() {
     const size_t hist_size = history.size();
     assert(hist_size > 0);
-    
+
     const Action last_action = history.back();
     // Turn correction (MUST BE DONE FIRST)
     if (last_action >= LOSE_ASSASSIN && last_action <= LOSE_BOTH) {
@@ -941,84 +1123,12 @@ void GameState::undo_action() {
     
     history.pop_back();
     current_player = 1 - current_player;
-    const bool is_p1 = (current_player == 0);
-    int& my_coins = is_p1 ? p1_coins : p2_coins;
-    int& opp_coins = is_p1 ? p2_coins : p1_coins;
-    std::array<int, 2>& my_influence = is_p1 ? p1_influence : p2_influence;
-    
-    switch (last_action) {
-        case INCOME:
-            my_coins -= 1;
-            break;
-            
-        case FOREIGN_AID:
-            my_coins -= 2;
-            break;
-            
-        case TAX:
-            my_coins -= 3;
-            break;
-            
-        case STEAL1:
-        case BLOCK_STEAL1_AMB:
-        case BLOCK_STEAL1_CAP:
-            my_coins -= 1;
-            opp_coins += 1;
-            break;
-            
-        case STEAL2:
-        case BLOCK_STEAL2_AMB:
-        case BLOCK_STEAL2_CAP:
-            my_coins -= 2;
-            opp_coins += 2;
-            break;
-            
-        case ASSASSINATE:
-            my_coins += COIN_TO_ASSASSINATE;
-            break;
-            
-        case COUP:
-            my_coins += COIN_TO_COUP;
-            break;
-            
-        case BLOCK_FOREIGN_AID:
-            opp_coins += 2;
-            break;
-            
-        case BLOCK_ASSASSINATE:
-            break;
-            
-        case LOSE_ASSASSIN:
-            undo_lose_card(ASSASSIN);
-            break;
-            
-        case LOSE_AMBASSADOR:
-            undo_lose_card(AMBASSADOR);
-            break;
-            
-        case LOSE_CAPTAIN:
-            undo_lose_card(CAPTAIN);
-            break;
-            
-        case LOSE_CONTESSA:
-            undo_lose_card(CONTESSA);
-            break;
-            
-        case LOSE_DUKE:
-            undo_lose_card(DUKE);
-            break;
-            
-        case LOSE_BOTH:
-            my_influence = {1, 1};
-            break;
-            
-        default:
-            break;
-    }
+    undo_baseline_action(last_action);
+    undo_extension_action(last_action);
 
-    // UNDO RULE: MOST LIKELY #6 + LIKELY #1
-    // If current action allows previous STEAL, FA, ASSASINATE
-    // Decrement current player's num_allowed_action
+    const bool is_p1 = (current_player == 0);
+
+    // Undo pruning "allowed action" trackers.
     if (history.size() >= 1) {
         const Action prev_action = history[history.size() - 1];
         if (prev_action == FOREIGN_AID && last_action != BLOCK_FOREIGN_AID) {
@@ -1047,9 +1157,7 @@ void GameState::undo_action() {
         }
     }
 
-    // UNDO RULE: LIKELY #2
-    // If current action is card-claiming action
-    // Decrement current player's claim count
+    // Undo pruning claim trackers.
     switch (last_action) {
         case TAX:
         case BLOCK_FOREIGN_AID:
@@ -1073,9 +1181,7 @@ void GameState::undo_action() {
             break;
     }
 
-    // UNDO RULE: LIKELY #2
-    // When card-claiming action is challenged
-    // Increment opponent's claim count
+    // Undo pruning claim trackers on challenge.
     if (last_action == CHALLENGE) {
         const Action prev_action = history[history.size() - 1];
         switch (prev_action) {
@@ -1213,7 +1319,7 @@ std::string GameState::get_game_state() const {
         output_string += " ";
     }
 
-    output_string += "\nLIKELY RULE#1 count variables: ";
+    output_string += "\nPruning accepted-action counters: ";
     output_string += std::to_string(num_p1_has_allowed_foreign_aid) + " ";
     output_string += std::to_string(num_p1_has_allowed_steal) + " ";
     output_string += std::to_string(num_p1_has_allowed_assassinate) + " ";
@@ -1221,7 +1327,7 @@ std::string GameState::get_game_state() const {
     output_string += std::to_string(num_p2_has_allowed_steal) + " ";
     output_string += std::to_string(num_p2_has_allowed_assassinate) + " ";
 
-    output_string += "\nLIKELY RULE#2 count variables: ";
+    output_string += "\nPruning claim counters: ";
     output_string += std::to_string(num_p1_has_claimed_duke) + " ";
     output_string += std::to_string(num_p1_has_claimed_steal_blocker) + " ";
     output_string += std::to_string(num_p1_has_claimed_contessa) + " ";

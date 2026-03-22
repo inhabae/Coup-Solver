@@ -48,6 +48,28 @@ enum Action {
 
 enum Card { ASSASSIN, AMBASSADOR, CAPTAIN, CONTESSA, DUKE };
 
+struct BaselineRulesConfig {
+  bool exchange_enabled = false;
+  bool reveal_redraw_enabled = false;
+};
+
+struct PruningRulesConfig {
+  bool enabled = true;
+};
+
+struct ExtensionRulesConfig {
+  bool claim_mate_enabled = true;
+};
+
+struct RulesConfig {
+  BaselineRulesConfig baseline{};
+  PruningRulesConfig pruning{};
+  ExtensionRulesConfig extensions{};
+
+  static RulesConfig solver_default();
+  static RulesConfig baseline_default();
+};
+
 const std::array<std::array<Card, 2>, 15> holdings = {{
     {ASSASSIN, ASSASSIN},
     {ASSASSIN, AMBASSADOR},
@@ -76,6 +98,7 @@ using ActionMask = uint32_t; // 32-bit bitmask where each bit corresponds to an 
 
 class GameState {
 public:
+  RulesConfig rules_config;
   int current_player;
   std::array<Card, 2> p1_cards;
   std::array<Card, 2> p2_cards;
@@ -85,13 +108,13 @@ public:
   int p2_coins;
   std::vector<Action> history;
 
-  // MOST LIKELY #6
+  // Pruning heuristic state: prior accepted stronger actions.
   int num_p1_has_allowed_tax;
   int num_p2_has_allowed_tax;
   int num_p1_has_allowed_block_fa;
   int num_p2_has_allowed_block_fa;
 
-  // LIKELY #1
+  // Pruning heuristic state: prior accepted actions.
   int num_p1_has_allowed_foreign_aid;
   int num_p2_has_allowed_foreign_aid;
   int num_p1_has_allowed_steal;
@@ -99,7 +122,7 @@ public:
   int num_p1_has_allowed_assassinate;
   int num_p2_has_allowed_assassinate;
 
-  // LIKELY #2
+  // Pruning heuristic state: prior public claims.
   int num_p1_has_claimed_duke;
   int num_p2_has_claimed_duke;
   int num_p1_has_claimed_steal_blocker;
@@ -107,7 +130,7 @@ public:
   int num_p1_has_claimed_contessa;
   int num_p2_has_claimed_contessa;
 
-  // LIKELY #3 - Snapshot variables when each player loses first influence
+  // Pruning heuristic snapshots taken when each player loses first influence.
   int p1_claims_duke_at_first_loss;
   int p1_claims_steal_blocker_at_first_loss;
   int p1_claims_contessa_at_first_loss;
@@ -117,11 +140,14 @@ public:
 
 public:
   GameState();
+  explicit GameState(const RulesConfig&);
   void reset();
   bool is_terminal() const;
   double get_utility() const;
   double get_br_utility(int, std::array<double, NUM_HOLDINGS>) const;
   int get_current_player() const;
+  void set_rules_config(const RulesConfig&);
+  const RulesConfig& get_rules_config() const;
   void set_cards(Card, Card, Card, Card);
   void set_my_cards(const std::array<Card, 2>);
   std::vector<Action> get_legal_actions() const;
@@ -149,7 +175,7 @@ public:
   // Mask helper: OR losing-card bits into legal_mask (no return)
   void set_card_losing_bits(const std::array<Card, 2>&, const std::array<int, 2>&, ActionMask&) const;
   
-  // Rule enforcement helpers
+  // Extension helper
   bool can_2v1_coupmate(int my_coins, int opp_coins, const std::array<Card, 2>& my_cards) const;
   
   void lose_card(Card);
@@ -165,6 +191,19 @@ public:
   void print_history() const;
   void print_game_state() const;
   std::string get_game_state() const; // for comparing two game states (e.g., testing do/undo)
+
+private:
+  ActionMask build_baseline_legal_mask() const;
+  ActionMask apply_pruning_heuristics(ActionMask) const;
+  ActionMask add_extension_actions(ActionMask) const;
+  void add_primary_turn_actions(ActionMask&, int my_coins, int opp_coins) const;
+  std::vector<Action> actions_from_mask(ActionMask) const;
+  bool can_force_coup_vs_one_influence() const;
+  bool can_force_claim_mate() const;
+  void apply_baseline_action(Action);
+  void undo_baseline_action(Action);
+  void apply_extension_action(Action);
+  void undo_extension_action(Action);
 };
 
 #endif

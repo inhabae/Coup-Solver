@@ -12,7 +12,8 @@ This solver:
 - Models the complete 1v1 Coup game tree with full action/response logic
 - Runs vanilla CFR to compute approximate Nash equilibrium strategies
 - Computes exploitability via best response calculation
-- Applies 6 successive tree-pruning rules to reduce the infoset count by **98.8%** (411M → 4.75M at depth 13)
+- Separates baseline game rules, solver pruning heuristics, and solver-only extensions
+- Applies 6 successive tree-pruning rules in solver mode to reduce the infoset count by **98.8%** (411M → 4.75M at depth 13)
 
 ---
 
@@ -54,7 +55,11 @@ make clean  # removes object files and executables
 
 Every turn a player may take a primary action (Income, Foreign Aid, Tax, Steal, Assassinate, Coup). The opponent may respond by blocking or challenging. Challenges and blocks are recursively handled, with card reveals and influence losses terminating sub-sequences.
 
-The full action enum spans 27 actions including show-card, lose-card, and the special `CLAIM_MATE` endgame move.
+The baseline implementation intentionally defers two official Coup mechanics:
+- `Exchange` is not implemented yet
+- Successful defense to a challenge does not reveal, redraw, and reshuffle yet
+
+The full action enum spans 27 actions including show-card, lose-card, and the solver-only `CLAIM_MATE` extension.
 
 ### Terminal Conditions
 
@@ -90,7 +95,11 @@ Hashed via **FNV-1a** for O(1) lookup. Hash collisions are detected and asserted
 
 ## Tree Pruning
 
-The game tree is pruned using 6 rules that eliminate strategically dominated or redundant subtrees without affecting Nash equilibrium. Applied during 2v2 subtree traversal:
+`GameState` supports two useful configurations:
+- Baseline mode: current supported core Coup flow, without solver pruning and without `CLAIM_MATE`
+- Solver mode: baseline mode plus pruning heuristics and the `CLAIM_MATE` extension
+
+The solver-mode game tree is pruned using 6 rules that eliminate strategically dominated or redundant subtrees without affecting Nash equilibrium. Applied during 2v2 subtree traversal:
 
 | # | Rule | Rationale |
 |---|---|---|
