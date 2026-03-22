@@ -75,6 +75,13 @@ enum class Phase {
     TERMINAL
 };
 
+struct PhaseSnapshot {
+    Phase  phase;
+    int    active_player;
+    int    current_player;
+    Action pending_action;
+};
+
 // ─────────────────────────────────────────────
 //  Rules config  (unchanged)
 // ─────────────────────────────────────────────
@@ -248,6 +255,8 @@ public:
     std::string get_game_state()   const;
 
 private:
+    std::vector<PhaseSnapshot> phase_stack;
+
     // ── legal-action building (one method per phase) ──
     ActionMask legal_mask_action()          const;
     ActionMask legal_mask_respond()         const;

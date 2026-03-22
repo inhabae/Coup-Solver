@@ -39,7 +39,7 @@ void test_income_flips_turn() {
 
 // ── 3. FOREIGN_AID → RESPOND, opponent can block or allow ────────────────────
 void test_foreign_aid_enters_respond() {
-    GameState g(RulesConfig::baseline_default());
+    GameState g(RulesConfig::solver_default());
     g.do_action(FOREIGN_AID);
     assert(g.phase == Phase::RESPOND);
     assert(g.pending_action == FOREIGN_AID);

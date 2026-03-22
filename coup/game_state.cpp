@@ -18,10 +18,6 @@ static inline bool is_block(Action a) {
     return a >= BLOCK_FOREIGN_AID && a <= BLOCK_ASSASSINATE;
 }
 
-static inline bool is_primary_action(Action a) {
-    return a <= COUP;
-}
-
 // The card that must be held to legally play / block with this action.
 // Returns ASSASSIN as a sentinel for actions that have no card requirement.
 static Card card_claimed_by(Action a) {
@@ -75,6 +71,8 @@ void GameState::reset() {
 
     history.clear();
     history.reserve(50);
+    phase_stack.clear();
+    phase_stack.reserve(50);
 
     num_p1_has_allowed_tax           = 0;
     num_p2_has_allowed_tax           = 0;
@@ -917,21 +915,6 @@ void GameState::undo_allow_trackers_on_action(Action a) {
 //    LOSE_*:  → ACTION (next turn) or TERMINAL.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Stored between advance_phase and retreat_phase so undo_action can reverse
-// the transition exactly.  We store them as a small struct pushed onto a vector.
-struct PhaseSnapshot {
-    Phase  phase;
-    int    active_player;
-    int    current_player;
-    Action pending_action;
-};
-
-// We keep a stack of snapshots parallel to history.
-// (A static vector is fine since GameState is not thread-shared during CFR.)
-// To avoid polluting the class header further we use a file-level variable.
-// NOTE: this is intentionally non-member; one per process.
-static std::vector<PhaseSnapshot> phase_stack;
-
 void GameState::advance_phase(Action a) {
     // Save current phase state so undo_action can restore it exactly.
     phase_stack.push_back({phase, active_player, current_player, pending_action});
@@ -972,6 +955,20 @@ void GameState::advance_phase(Action a) {
         }
 
         case Phase::RESPOND: {
+            if (pending_action == ASSASSINATE &&
+                a >= LOSE_ASSASSIN && a <= LOSE_BOTH) {
+                if ((p1_influence[0] + p1_influence[1] == 0) ||
+                    (p2_influence[0] + p2_influence[1] == 0)) {
+                    phase = Phase::TERMINAL;
+                    return;
+                }
+                // The responder accepted the assassination by choosing a card to lose.
+                // Their turn now begins as the new ACTION phase.
+                phase          = Phase::ACTION;
+                active_player  = actor;
+                current_player = actor;
+                return;
+            }
             if (a == CHALLENGE) {
                 // Opponent challenged pending_action.  Claimer (actor) shows.
                 phase          = Phase::SHOW_CARD;
@@ -1039,16 +1036,9 @@ void GameState::advance_phase(Action a) {
                 phase = Phase::TERMINAL;
                 return;
             }
-            // Whose turn is next?  It depends on what triggered the LOSE_CARD.
-            // pending_action at this point is:
-            //   COUP        → active_player couped, so next turn = opponent of couper = actor
-            //   ASSASSINATE → active_player assassinated, so next turn = active_player advances
-            //   SHOW_*      → challenger lost card, so next turn = active_player (the original actor)
-            //   Primary won by challenge → next = original active_player
-            // In all cases the player who did NOT just lose a card goes next,
-            // which is other = 1 - actor.  active_player was set before LOSE_CARD.
             phase          = Phase::ACTION;
-            current_player = active_player; // whoever held the turn
+            active_player  = actor;
+            current_player = actor;
             return;
         }
 
