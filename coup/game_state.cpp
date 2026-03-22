@@ -126,38 +126,15 @@ double GameState::get_utility() const {
                                  : (p1_dead ? 1.0 : -1.0);
 }
 
-double GameState::get_br_utility(int max_player,
-                                  std::array<double, NUM_HOLDINGS> dist) const {
+double GameState::get_br_utility(int max_player) const {
     assert(is_terminal());
 
-    if (!history.empty() && history.back() == CLAIM_MATE) return -1.0;
+    if (!history.empty() && history.back() == CLAIM_MATE)
+        return (current_player == max_player) ? -1.0 : 1.0;
 
-    // Coup: the player who was couped loses. That player is current_player
-    // (the one asked to lose a card) — but current_player was flipped after COUP
-    // so it's actually the opponent of the coup-initiator. Simpler: if the
-    // terminal was a COUP then the initiator (1-current_player) wins.
-    if (!history.empty() && history.back() == COUP) return 1.0;
-
-    // Challenge resolution: pending_action holds the challenged action.
-    // If max_player is challenged, check their actual cards.
-    // If the opponent is challenged, weight over card distribution.
-    const Card needed = card_claimed_by(pending_action);
-
-    // max_player is the one who was challenged
-    if (current_player == max_player) {
-        const auto& cards = (max_player == 0) ? p1_cards : p2_cards;
-        const auto& inf   = (max_player == 0) ? p1_influence : p2_influence;
-        const bool  has   = (inf[0] == 1 && cards[0] == needed) ||
-                            (inf[1] == 1 && cards[1] == needed);
-        return has ? 1.0 : -1.0;
-    } else {
-        double u = 0.0;
-        for (size_t h = 0; h < NUM_HOLDINGS; ++h) {
-            const bool has = (holdings[h][0] == needed || holdings[h][1] == needed);
-            u += dist[h] * (has ? 1.0 : -1.0);
-        }
-        return u;
-    }
+    const bool p1_dead = (p1_influence[0] == 0 && p1_influence[1] == 0);
+    return (max_player == 0) ? (p1_dead ? -1.0 : 1.0)
+                             : (p1_dead ?  1.0 : -1.0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

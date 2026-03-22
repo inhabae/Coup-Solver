@@ -104,7 +104,7 @@ double Trainer::cfr(GameState& g, double p1_reach, double p2_reach) {
 
 double Trainer::calculate_best_response(GameState& g, const int max_player,
                                          std::array<double, NUM_HOLDINGS> pair_dist) {
-    if (g.is_terminal()) return g.get_br_utility(max_player, pair_dist);
+    if (g.is_terminal()) return g.get_br_utility(max_player);
 
     if (g.get_current_player() == max_player) {
         std::vector<Action> actions = g.get_legal_actions();

@@ -201,7 +201,7 @@ public:
     // ── queries ──
     bool   is_terminal() const;
     double get_utility() const;
-    double get_br_utility(int max_player, std::array<double, NUM_HOLDINGS> pair_distribution) const;
+    double get_br_utility(int max_player) const;
     int    get_current_player() const;
 
     // ── configuration ──
