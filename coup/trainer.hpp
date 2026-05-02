@@ -1,48 +1,80 @@
-#ifndef TRAINER_HPP
-#define TRAINER_HPP
+#ifndef COUP_TRAINER_HPP
+#define COUP_TRAINER_HPP
 
 #include "game_state.hpp"
 
-#include <set>
+#include <cstdint>
+#include <cstddef>
+#include <functional>
+#include <random>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
-class Trainer {
-public:
-    std::unordered_map<size_t, std::vector<double>> regret_sum;
-    std::unordered_map<size_t, std::vector<double>> strategy_sum;
-    std::unordered_map<size_t, std::vector<Action>> next_actions;
-    std::unordered_map<size_t, std::string> hash_to_string;
+namespace coup {
 
-    double current_utility;
+using CfrValue = float;
 
-    // For 2v2 terminal state detection
-    std::unordered_set<size_t> valid_histories;
-    std::unordered_map<size_t, std::vector<Action>> history_map;
+struct InfosetNode {
+    InfosetKey key{};
+    std::string debug_label{};
+    ActionMask legal_mask{0};
+    std::vector<CfrValue> regret_sum{};
+    std::vector<CfrValue> strategy_sum{};
+    std::vector<CfrValue> current_strategy{};
 
-    Trainer();
+    InfosetNode() = default;
+    InfosetNode(const InfosetKey& infoset_key, std::string label, ActionMask actions);
 
-    std::vector<double> get_strategy(size_t infoset);
-    std::vector<double> get_average_strategy(size_t infoset);
-    double cfr(GameState& g, double p1_reach, double p2_reach);
-    double calculate_best_response(GameState& g, const int max_player, std::array<double, NUM_HOLDINGS> pair_distribution);
-    void train(size_t iterations);
-    
-    int card_to_index(Card c);
-    std::array<double, NUM_HOLDINGS> calculate_pair_distribution(Card removed_card1, Card removed_card2);
-    double calculate_pair_probability(Card card1, Card card2);
-    void calculate_exploitability();
-    
-    // For debugging
-    void get_tree_size(size_t max_depth);
-    void get_2v2_tree_size(size_t max_depth);
-    void collect_histories(GameState& g, std::set<std::string>& histories, size_t max_depth, bool use_original);
-    std::string history_to_string(const std::vector<Action>& history);
-    void find_2v2_terminals(GameState& g, size_t move_limit);
-    std::unordered_set<size_t> find_all_2v2_terminals(size_t move_limit = 2);
-    void compare_tree_size(size_t max_size);
+    std::vector<CfrValue> strategy();
+    void accumulate_strategy(const std::vector<CfrValue>& strategy, CfrValue realization_weight);
+    std::vector<CfrValue> average_strategy() const;
 };
+
+struct InfosetKeyHash {
+    std::size_t operator()(const InfosetKey& key) const;
+};
+
+struct TrainingStats {
+    int64_t iterations{0};
+    CfrValue utility0_sum{0.0F};
+    std::size_t infosets{0};
+};
+
+class CfrTrainer {
+public:
+    explicit CfrTrainer(uint32_t seed = 1, int max_public_actions = 20);
+    CfrTrainer(uint32_t seed, int max_2v2_public_actions, int max_non_2v2_public_actions);
+
+    TrainingStats train(int iterations);
+    CfrValue run_iteration();
+
+    const std::unordered_map<InfosetKey, InfosetNode, InfosetKeyHash>& nodes() const;
+    void set_node_creation_callback(std::function<void(std::size_t)> callback);
+
+private:
+    uint32_t seed_{1};
+    std::mt19937 rng_;
+    int max_2v2_public_actions_{20};
+    int max_non_2v2_public_actions_{20};
+    int next_traverser_{0};
+    ObservationStorePtr observation_store_;
+    std::unordered_map<InfosetKey, InfosetNode, InfosetKeyHash> nodes_;
+    std::function<void(std::size_t)> node_creation_callback_;
+
+    CfrValue run_traversal(int traverser);
+    CfrValue cfr(GameState& state, int traverser, CfrValue reach0, CfrValue reach1, CfrValue sample_reach);
+    bool exceeds_history_limit(const GameState& state) const;
+    CfrValue depth_limited_utility(const GameState& state, int traverser) const;
+    InfosetNode& node_for(const GameState& state, int player);
+    ChanceOutcome sample_chance(const GameState& state, int traverser, const std::vector<ChanceOutcome>& outcomes) const;
+    Action sample_action(const GameState& state, int traverser, const std::vector<Action>& actions,
+                         const std::vector<CfrValue>& strategy) const;
+    Deal sample_deal();
+};
+
+std::vector<Action> actions_from_mask(ActionMask mask);
+
+} // namespace coup
 
 #endif
