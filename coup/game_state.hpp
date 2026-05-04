@@ -111,6 +111,7 @@ public:
     explicit GameState(ObservationStorePtr observation_store);
     GameState(const Deal& deal, ObservationStorePtr observation_store);
 
+    void canonicalize_hands();
     void reset();
     void reset(const Deal& deal);
     void set_deal(const Deal& deal);

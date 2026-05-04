@@ -162,6 +162,14 @@ GameState::GameState(const Deal& deal, ObservationStorePtr observation_store)
     reset(deal);
 }
 
+void GameState::canonicalize_hands() {
+    for (int p = 0; p < kPlayers; ++p) {
+        if (static_cast<int>(cards_[p][1]) < static_cast<int>(cards_[p][0])) {
+            std::swap(cards_[p][0], cards_[p][1]);
+        }
+    }
+}
+
 void GameState::reset() {
     Deal deal;
     deal.cards = {{{{Card::Duke, Card::Assassin}}, {{Card::Captain, Card::Ambassador}}}};
@@ -174,6 +182,7 @@ void GameState::reset(const Deal& deal) {
     phase_ = Phase::TurnAction;
     coins_ = {kStartingCoins, kStartingCoins};
     cards_ = deal.cards;
+    canonicalize_hands();
     live_ = {{{true, true}, {true, true}}};
     steal_allowed_restricted_ = {false, false};
     foreign_aid_block_allowed_restricted_ = {false, false};

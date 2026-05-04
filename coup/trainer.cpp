@@ -11,6 +11,7 @@ namespace coup {
 namespace {
 
 constexpr CfrValue kDefaultStrategyEpsilon = 1e-7F;
+constexpr std::size_t kActionCount = static_cast<std::size_t>(Action::Count);
 
 int action_index(Action action) {
     return static_cast<int>(action);
@@ -43,51 +44,50 @@ std::vector<Action> actions_from_mask(ActionMask mask) {
     return actions;
 }
 
-InfosetNode::InfosetNode(const InfosetKey& infoset_key, std::string label, ActionMask actions)
+InfosetNode::InfosetNode(const InfosetKey& infoset_key, ActionMask actions)
     : key(infoset_key),
-      debug_label(std::move(label)),
-      legal_mask(actions),
-      regret_sum(static_cast<std::size_t>(Action::Count), 0.0),
-      strategy_sum(static_cast<std::size_t>(Action::Count), 0.0),
-      current_strategy(static_cast<std::size_t>(Action::Count), 0.0) {}
+      legal_mask(actions) {
+    regret_sum.fill(0.0F);
+    strategy_sum.fill(0.0F);
+}
 
-std::vector<CfrValue> InfosetNode::strategy() {
+std::array<CfrValue, static_cast<std::size_t>(Action::Count)> InfosetNode::strategy() const {
     const std::vector<Action> legal_actions = actions_from_mask(legal_mask);
     if (legal_actions.empty()) throw std::runtime_error("infoset has no legal actions");
 
+    std::array<CfrValue, kActionCount> current{};
+    current.fill(0.0F);
+
     CfrValue normalizer = 0.0F;
-    std::fill(current_strategy.begin(), current_strategy.end(), 0.0F);
     for (Action action : legal_actions) {
-        const int index = action_index(action);
-        current_strategy[static_cast<std::size_t>(index)] =
-            std::max(0.0F, regret_sum[static_cast<std::size_t>(index)]);
-        normalizer += current_strategy[static_cast<std::size_t>(index)];
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        current[idx] = std::max(0.0F, regret_sum[idx]);
+        normalizer += current[idx];
     }
 
     const CfrValue default_probability = 1.0F / static_cast<CfrValue>(legal_actions.size());
     for (Action action : legal_actions) {
-        const int index = action_index(action);
-        CfrValue probability = default_probability;
-        if (normalizer > kDefaultStrategyEpsilon) {
-            probability = current_strategy[static_cast<std::size_t>(index)] / normalizer;
-        }
-        current_strategy[static_cast<std::size_t>(index)] = probability;
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        current[idx] = normalizer > kDefaultStrategyEpsilon
+            ? current[idx] / normalizer
+            : default_probability;
     }
 
-    return current_strategy;
+    return current;
 }
 
-void InfosetNode::accumulate_strategy(const std::vector<CfrValue>& strategy, CfrValue realization_weight) {
-    const std::vector<Action> legal_actions = actions_from_mask(legal_mask);
-    for (Action action : legal_actions) {
-        const int index = action_index(action);
-        strategy_sum[static_cast<std::size_t>(index)] +=
-            realization_weight * strategy[static_cast<std::size_t>(index)];
+void InfosetNode::accumulate_strategy(
+    const std::array<CfrValue, kActionCount>& strat,
+    CfrValue realization_weight) {
+    for (Action action : actions_from_mask(legal_mask)) {
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        strategy_sum[idx] += realization_weight * strat[idx];
     }
 }
 
-std::vector<CfrValue> InfosetNode::average_strategy() const {
-    std::vector<CfrValue> average(static_cast<std::size_t>(Action::Count), 0.0F);
+std::array<CfrValue, static_cast<std::size_t>(Action::Count)> InfosetNode::average_strategy() const {
+    std::array<CfrValue, kActionCount> average{};
+    average.fill(0.0F);
     const std::vector<Action> legal_actions = actions_from_mask(legal_mask);
     if (legal_actions.empty()) return average;
 
@@ -98,11 +98,10 @@ std::vector<CfrValue> InfosetNode::average_strategy() const {
 
     const CfrValue default_probability = 1.0F / static_cast<CfrValue>(legal_actions.size());
     for (Action action : legal_actions) {
-        const int index = action_index(action);
-        average[static_cast<std::size_t>(index)] =
-            normalizer > kDefaultStrategyEpsilon
-                ? strategy_sum[static_cast<std::size_t>(index)] / normalizer
-                : default_probability;
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        average[idx] = normalizer > kDefaultStrategyEpsilon
+            ? strategy_sum[idx] / normalizer
+            : default_probability;
     }
     return average;
 }
@@ -168,6 +167,10 @@ const std::unordered_map<InfosetKey, InfosetNode, InfosetKeyHash>& CfrTrainer::n
     return nodes_;
 }
 
+const ObservationStore& CfrTrainer::observation_store() const {
+    return *observation_store_;
+}
+
 void CfrTrainer::set_node_creation_callback(std::function<void(std::size_t)> callback) {
     node_creation_callback_ = std::move(callback);
 }
@@ -191,7 +194,7 @@ CfrValue CfrTrainer::cfr(GameState& state, int traverser, CfrValue reach0, CfrVa
     const int player = state.current_player();
     InfosetNode& node = node_for(state, player);
     const CfrValue player_reach = player == 0 ? reach0 : reach1;
-    const std::vector<CfrValue> strategy = node.strategy();
+    const auto strategy = node.strategy();
     if (player == traverser) {
         node.accumulate_strategy(strategy, player_reach / sample_reach);
     }
@@ -210,28 +213,22 @@ CfrValue CfrTrainer::cfr(GameState& state, int traverser, CfrValue reach0, CfrVa
     }
 
     CfrValue node_value = 0.0F;
-    std::vector<CfrValue> action_values(static_cast<std::size_t>(Action::Count), 0.0F);
+    std::array<CfrValue, kActionCount> action_values{};
+    action_values.fill(0.0F);
     for (Action action : legal_actions) {
-        const int index = action_index(action);
-        const CfrValue probability = strategy[static_cast<std::size_t>(index)];
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        const CfrValue probability = strategy[idx];
         state.apply(action);
-        if (player == 0) {
-            action_values[static_cast<std::size_t>(index)] =
-                cfr(state, traverser, reach0 * probability, reach1, sample_reach);
-        } else {
-            action_values[static_cast<std::size_t>(index)] =
-                cfr(state, traverser, reach0, reach1 * probability, sample_reach);
-        }
+        action_values[idx] = player == 0
+            ? cfr(state, traverser, reach0 * probability, reach1, sample_reach)
+            : cfr(state, traverser, reach0, reach1 * probability, sample_reach);
         state.undo();
-        node_value += probability * action_values[static_cast<std::size_t>(index)];
+        node_value += probability * action_values[idx];
     }
 
-    if (player == traverser) {
-        for (Action action : legal_actions) {
-            const int index = action_index(action);
-            const CfrValue regret = action_values[static_cast<std::size_t>(index)] - node_value;
-            node.regret_sum[static_cast<std::size_t>(index)] += regret;
-        }
+    for (Action action : legal_actions) {
+        const std::size_t idx = static_cast<std::size_t>(action_index(action));
+        node.regret_sum[idx] += action_values[idx] - node_value;
     }
 
     return node_value;
@@ -257,7 +254,8 @@ CfrValue CfrTrainer::depth_limited_utility(const GameState& state, int traverser
 InfosetNode& CfrTrainer::node_for(const GameState& state, int player) {
     const InfosetKey key = state.infoset(player);
     const ActionMask legal_mask = state.legal_actions();
-    auto [it, inserted] = nodes_.try_emplace(key, key, state.infoset_debug_string(player), legal_mask);
+    // No debug_label stored — pass only key and legal_mask.
+    auto [it, inserted] = nodes_.try_emplace(key, key, legal_mask);
     if (inserted && node_creation_callback_) {
         node_creation_callback_(nodes_.size());
     }
@@ -288,7 +286,7 @@ ChanceOutcome CfrTrainer::sample_chance(const GameState& state, int traverser,
 }
 
 Action CfrTrainer::sample_action(const GameState& state, int traverser, const std::vector<Action>& actions,
-                                 const std::vector<CfrValue>& strategy) const {
+                                 const std::array<CfrValue, static_cast<std::size_t>(Action::Count)>& strategy) const {
     if (actions.empty()) throw std::runtime_error("cannot sample from empty action set");
     const int player = state.current_player();
     const InfosetKey key = state.infoset(player);

@@ -3,6 +3,7 @@
 
 #include "game_state.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstddef>
 #include <functional>
@@ -17,18 +18,21 @@ using CfrValue = float;
 
 struct InfosetNode {
     InfosetKey key{};
-    std::string debug_label{};
     ActionMask legal_mask{0};
-    std::vector<CfrValue> regret_sum{};
-    std::vector<CfrValue> strategy_sum{};
-    std::vector<CfrValue> current_strategy{};
+    // Fixed-size arrays replace heap-allocated vectors.
+    // current_strategy is computed on the fly in strategy() and not stored.
+    std::array<CfrValue, static_cast<std::size_t>(Action::Count)> regret_sum{};
+    std::array<CfrValue, static_cast<std::size_t>(Action::Count)> strategy_sum{};
 
     InfosetNode() = default;
-    InfosetNode(const InfosetKey& infoset_key, std::string label, ActionMask actions);
+    InfosetNode(const InfosetKey& infoset_key, ActionMask actions);
 
-    std::vector<CfrValue> strategy();
-    void accumulate_strategy(const std::vector<CfrValue>& strategy, CfrValue realization_weight);
-    std::vector<CfrValue> average_strategy() const;
+    // Returns a locally-computed strategy vector (not stored).
+    std::array<CfrValue, static_cast<std::size_t>(Action::Count)> strategy() const;
+    void accumulate_strategy(
+        const std::array<CfrValue, static_cast<std::size_t>(Action::Count)>& strat,
+        CfrValue realization_weight);
+    std::array<CfrValue, static_cast<std::size_t>(Action::Count)> average_strategy() const;
 };
 
 struct InfosetKeyHash {
@@ -36,9 +40,12 @@ struct InfosetKeyHash {
 };
 
 struct TrainingStats {
-    int64_t iterations{0};
-    CfrValue utility0_sum{0.0F};
-    std::size_t infosets{0};
+    int64_t iterations = 0;
+    std::size_t infosets = 0;
+    std::size_t last_infosets = 0;
+    std::size_t new_infosets = 0;
+    double new_infosets_per_iter = 0.0;
+    double utility0_sum = 0.0;
 };
 
 class CfrTrainer {
@@ -50,6 +57,7 @@ public:
     CfrValue run_iteration();
 
     const std::unordered_map<InfosetKey, InfosetNode, InfosetKeyHash>& nodes() const;
+    const ObservationStore& observation_store() const;
     void set_node_creation_callback(std::function<void(std::size_t)> callback);
 
 private:
@@ -69,7 +77,7 @@ private:
     InfosetNode& node_for(const GameState& state, int player);
     ChanceOutcome sample_chance(const GameState& state, int traverser, const std::vector<ChanceOutcome>& outcomes) const;
     Action sample_action(const GameState& state, int traverser, const std::vector<Action>& actions,
-                         const std::vector<CfrValue>& strategy) const;
+                         const std::array<CfrValue, static_cast<std::size_t>(Action::Count)>& strategy) const;
     Deal sample_deal();
 };
 
