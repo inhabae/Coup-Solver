@@ -130,11 +130,10 @@ double HeuristicValueEvaluator::evaluate(const PublicState& public_state, const 
     return heuristic_from_public(public_state, player);
 }
 
-DepthLimitedResolver::DepthLimitedResolver(int iterations, int depth, const ValueEvaluator& evaluator, uint32_t seed)
+DepthLimitedResolver::DepthLimitedResolver(int iterations, int depth, const ValueEvaluator& evaluator, uint32_t)
     : iterations_(iterations),
       depth_(depth),
-      evaluator_(evaluator),
-      rng_(seed) {
+      evaluator_(evaluator) {
     if (iterations_ <= 0) throw std::invalid_argument("resolver iterations must be positive");
     if (depth_ < 0) throw std::invalid_argument("resolver depth must be non-negative");
 }
@@ -142,13 +141,16 @@ DepthLimitedResolver::DepthLimitedResolver(int iterations, int depth, const Valu
 SearchResult DepthLimitedResolver::resolve(const GameState& root, int player) {
     if (player < 0 || player >= kPlayers) throw std::invalid_argument("invalid resolve player");
     nodes_.clear();
+    double value_sum = 0.0;
     for (int i = 0; i < iterations_; ++i) {
         GameState copy = root;
-        traversal(copy, i % kPlayers, depth_, 1.0, 1.0);
+        const int traverser = i % kPlayers;
+        const double traverser_value = traversal(copy, traverser, depth_, 1.0, 1.0);
+        value_sum += traverser == player ? traverser_value : -traverser_value;
     }
 
     SearchResult result;
-    result.value = evaluator_.evaluate(public_state_from(root), belief_from_public_state(public_state_from(root)), player);
+    result.value = value_sum / static_cast<double>(iterations_);
     if (!root.is_terminal()) {
         const InfosetKey key = root.infoset(player);
         const auto found = nodes_.find(key);
@@ -160,12 +162,48 @@ SearchResult DepthLimitedResolver::resolve(const GameState& root, int player) {
     return result;
 }
 
+BeliefState DepthLimitedResolver::belief_from_current_policy(const PublicState& public_state) const {
+    BeliefState belief;
+    belief.deals = all_deals();
+    double total = 0.0;
+    for (std::size_t i = 0; i < belief.deals.size(); ++i) {
+        const Deal& deal = belief.deals[i];
+        GameState replayed(deal);
+        double reach = 1.0;
+        bool valid = true;
+        try {
+            for (const PublicEvent& event : public_state.history) {
+                if (replayed.is_terminal() || replayed.current_player() != event.player ||
+                    !replayed.is_legal(event.action)) {
+                    valid = false;
+                    break;
+                }
+                reach *= current_policy_probability(replayed, event.player, event.action);
+                replayed.apply(event.action);
+            }
+        } catch (const std::exception&) {
+            valid = false;
+        }
+        if (!valid || reach <= 0.0) continue;
+        const PublicState replayed_public = public_state_from(replayed);
+        if (!same_public_state(replayed_public, public_state)) continue;
+        belief.probabilities[i] = reach;
+        total += reach;
+    }
+    if (total > 0.0) {
+        for (double& probability : belief.probabilities) probability /= total;
+    } else {
+        return belief_from_public_state(public_state);
+    }
+    return belief;
+}
+
 double DepthLimitedResolver::traversal(GameState& state, int traverser, int remaining_depth,
                                        double reach0, double reach1) {
     if (state.is_terminal()) return state.utility(traverser);
     if (remaining_depth <= 0) {
         const PublicState public_state = public_state_from(state);
-        const BeliefState belief = belief_from_public_state(public_state);
+        const BeliefState belief = belief_from_current_policy(public_state);
         return evaluator_.evaluate(public_state, belief, traverser);
     }
 
@@ -180,20 +218,17 @@ double DepthLimitedResolver::traversal(GameState& state, int traverser, int rema
 
     const std::vector<Action> actions = actions_from_mask(state.legal_actions());
     if (player != traverser) {
-        std::vector<double> weights;
-        weights.reserve(actions.size());
+        double node_value = 0.0;
         for (Action action : actions) {
-            weights.push_back(strategy[static_cast<std::size_t>(action_index(action))]);
+            const std::size_t index = static_cast<std::size_t>(action_index(action));
+            state.apply(action);
+            const double action_value = player == 0
+                ? traversal(state, traverser, remaining_depth - 1, reach0 * strategy[index], reach1)
+                : traversal(state, traverser, remaining_depth - 1, reach0, reach1 * strategy[index]);
+            state.undo();
+            node_value += strategy[index] * action_value;
         }
-        std::discrete_distribution<int> dist(weights.begin(), weights.end());
-        const Action action = actions[static_cast<std::size_t>(dist(rng_))];
-        const double probability = strategy[static_cast<std::size_t>(action_index(action))];
-        state.apply(action);
-        const double value = player == 0
-            ? traversal(state, traverser, remaining_depth - 1, reach0 * probability, reach1)
-            : traversal(state, traverser, remaining_depth - 1, reach0, reach1 * probability);
-        state.undo();
-        return value;
+        return node_value;
     }
 
     std::array<double, kActionCount> action_values{};
@@ -228,6 +263,18 @@ DepthLimitedResolver::LocalNode& DepthLimitedResolver::node_for(const GameState&
 
 std::size_t DepthLimitedResolver::LocalKeyHash::operator()(InfosetKey key) const {
     return static_cast<std::size_t>(key.value ^ (key.value >> 32));
+}
+
+double DepthLimitedResolver::current_policy_probability(const GameState& state, int player, Action action) const {
+    const InfosetKey key = state.infoset(player);
+    const auto found = nodes_.find(key);
+    const ActionMask legal_mask = state.legal_actions();
+    if (found == nodes_.end()) {
+        return regret_matching(legal_mask, {})[static_cast<std::size_t>(action_index(action))];
+    }
+    const std::array<double, kActionCount> strategy =
+        average_strategy(found->second.legal_mask, found->second.strategy_sum);
+    return strategy[static_cast<std::size_t>(action_index(action))];
 }
 
 std::array<Deal, kDealCount> all_deals() {
@@ -305,13 +352,13 @@ std::vector<double> value_features(const PublicState& public_state, const Belief
 }
 
 TrainingSample make_training_sample(const GameState& state, DepthLimitedResolver& resolver,
-                                    const ValueEvaluator& evaluator) {
+                                    const ValueEvaluator&) {
     TrainingSample sample;
     sample.public_state = public_state_from(state);
-    sample.belief = belief_from_public_state(sample.public_state);
     sample.player = state.current_player();
     sample.search_result = resolver.resolve(state, sample.player);
-    sample.target_value = evaluator.evaluate(sample.public_state, sample.belief, sample.player);
+    sample.belief = resolver.belief_from_current_policy(sample.public_state);
+    sample.target_value = sample.search_result.value;
     return sample;
 }
 
@@ -333,8 +380,8 @@ std::vector<TrainingSample> generate_training_samples(int samples, int max_steps
             if (static_cast<int>(rows.size()) >= samples) return rows;
             TrainingSample opponent_row = sample_row;
             opponent_row.player = 1 - sample_row.player;
-            opponent_row.target_value = evaluator.evaluate(opponent_row.public_state, opponent_row.belief,
-                                                           opponent_row.player);
+            opponent_row.search_result.value = -sample_row.search_result.value;
+            opponent_row.target_value = opponent_row.search_result.value;
             rows.push_back(opponent_row);
             if (static_cast<int>(rows.size()) >= samples) return rows;
 

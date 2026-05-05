@@ -5,7 +5,6 @@
 
 #include <array>
 #include <cstdint>
-#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -66,6 +65,7 @@ public:
     DepthLimitedResolver(int iterations, int depth, const ValueEvaluator& evaluator, uint32_t seed = 1);
 
     SearchResult resolve(const GameState& root, int player);
+    BeliefState belief_from_current_policy(const PublicState& public_state) const;
 
 private:
     struct LocalNode {
@@ -82,11 +82,11 @@ private:
     int iterations_{0};
     int depth_{0};
     const ValueEvaluator& evaluator_;
-    std::mt19937 rng_;
     std::unordered_map<InfosetKey, LocalNode, LocalKeyHash> nodes_;
 
     double traversal(GameState& state, int traverser, int remaining_depth, double reach0, double reach1);
     LocalNode& node_for(const GameState& state, int player);
+    double current_policy_probability(const GameState& state, int player, Action action) const;
 };
 
 std::array<Deal, kDealCount> all_deals();
