@@ -92,8 +92,30 @@ class TorchValueEvaluator:
             return float(self.model(tensor).item())
 
 
-def make_pybind_evaluator(checkpoint_path: Path) -> object:
-    torch_evaluator = TorchValueEvaluator(checkpoint_path)
+class TorchModelEvaluator:
+    def __init__(self, model: object, feature_dim: int) -> None:
+        require_torch()
+        require_bridge()
+        self.model = model
+        self.feature_dim = int(feature_dim)
+
+    def value(self, public_state: object, belief: object, player: int) -> float:
+        features = rebel.value_features(public_state, belief, int(player))
+        if len(features) != self.feature_dim:
+            raise ValueError(f"feature dimension mismatch: got {len(features)}, expected {self.feature_dim}")
+        was_training = bool(self.model.training)
+        self.model.eval()
+        try:
+            with torch.no_grad():
+                tensor = torch.tensor([features], dtype=torch.float32)
+                return float(self.model(tensor).item())
+        finally:
+            if was_training:
+                self.model.train()
+
+
+def wrap_pybind_evaluator(torch_evaluator: object) -> object:
+    require_bridge()
 
     class ModelBackedEvaluator(rebel.ValueEvaluator):
         def __init__(self) -> None:
@@ -107,76 +129,142 @@ def make_pybind_evaluator(checkpoint_path: Path) -> object:
     return evaluator
 
 
+def make_pybind_evaluator(checkpoint_path: Path) -> object:
+    return wrap_pybind_evaluator(TorchValueEvaluator(checkpoint_path))
+
+
+def make_model_pybind_evaluator(model: object, feature_dim: int) -> object:
+    return wrap_pybind_evaluator(TorchModelEvaluator(model, feature_dim))
+
+
+def infer_feature_dim() -> int:
+    require_bridge()
+    state = rebel.GameState(rebel.all_deals()[0])
+    public_state = rebel.public_state_from(state)
+    belief = rebel.belief_from_public_state(public_state)
+    return len(rebel.value_features(public_state, belief, 0))
+
+
 def generate_samples(args: argparse.Namespace) -> list[object]:
     require_bridge()
-    return rebel.generate_training_samples(
+    if getattr(args, "bootstrap_heuristic", False):
+        return rebel.generate_training_samples(
+            args.samples,
+            args.max_steps,
+            args.seed,
+            args.resolve_iterations,
+            args.resolve_depth,
+        )
+    if getattr(args, "leaf_checkpoint", None):
+        evaluator = make_pybind_evaluator(Path(args.leaf_checkpoint))
+        return rebel.generate_training_samples_with_evaluator(
+            args.samples,
+            args.max_steps,
+            args.seed,
+            args.resolve_iterations,
+            args.resolve_depth,
+            evaluator,
+        )
+    require_torch()
+    torch.manual_seed(args.seed)
+    feature_dim = infer_feature_dim()
+    model = ValueNet(input_dim=feature_dim, hidden_dim=args.hidden_dim)
+    evaluator = make_model_pybind_evaluator(model, feature_dim)
+    return rebel.generate_training_samples_with_evaluator(
         args.samples,
         args.max_steps,
         args.seed,
         args.resolve_iterations,
         args.resolve_depth,
+        evaluator,
     )
 
 
 def train(args: argparse.Namespace) -> None:
     require_torch()
+    require_bridge()
+    if args.rebel_iterations <= 0:
+        raise ValueError("--rebel-iterations must be positive")
     torch.manual_seed(args.seed)
-    samples = generate_samples(args)
-    dataset = ValueDataset(samples)
-    val_size = max(1, int(len(dataset) * args.validation_fraction)) if len(dataset) > 1 else 0
-    train_size = len(dataset) - val_size
-    train_dataset, val_dataset = random_split(
-        dataset,
-        [train_size, val_size],
-        generator=torch.Generator().manual_seed(args.seed),
-    )
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size) if val_size else None
-
-    model = ValueNet(input_dim=int(dataset.features.shape[1]), hidden_dim=args.hidden_dim)
+    feature_dim = infer_feature_dim()
+    model = ValueNet(input_dim=feature_dim, hidden_dim=args.hidden_dim)
+    if args.checkpoint:
+        checkpoint = torch.load(Path(args.checkpoint), map_location="cpu")
+        if checkpoint.get("schema") != SCHEMA:
+            raise ValueError(f"checkpoint schema mismatch: {checkpoint.get('schema')!r}")
+        if int(checkpoint["feature_dim"]) != feature_dim:
+            raise ValueError(f"checkpoint feature dimension mismatch: {checkpoint['feature_dim']} != {feature_dim}")
+        if int(checkpoint["hidden_dim"]) != args.hidden_dim:
+            raise ValueError(f"checkpoint hidden dimension mismatch: {checkpoint['hidden_dim']} != {args.hidden_dim}")
+        model.load_state_dict(checkpoint["model_state_dict"])
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     loss_fn = nn.MSELoss()
     best_val = float("inf")
     best_state = None
 
-    for epoch in range(1, args.epochs + 1):
-        model.train()
-        train_loss = 0.0
-        train_count = 0
-        for features, values in train_loader:
-            optimizer.zero_grad(set_to_none=True)
-            loss = loss_fn(model(features), values)
-            loss.backward()
-            optimizer.step()
-            train_loss += float(loss.item()) * int(features.shape[0])
-            train_count += int(features.shape[0])
-
-        model.eval()
-        val_loss = 0.0
-        val_count = 0
-        if val_loader is not None:
-            with torch.no_grad():
-                for features, values in val_loader:
-                    loss = loss_fn(model(features), values)
-                    val_loss += float(loss.item()) * int(features.shape[0])
-                    val_count += int(features.shape[0])
-
-        print(
-            json.dumps(
-                {
-                    "epoch": epoch,
-                    "train_mse": train_loss / max(train_count, 1),
-                    "val_mse": val_loss / max(val_count, 1) if val_count else None,
-                    "samples": len(dataset),
-                }
-            )
+    total_samples = 0
+    for rebel_iteration in range(1, args.rebel_iterations + 1):
+        evaluator = make_model_pybind_evaluator(model, feature_dim)
+        samples = rebel.generate_training_samples_with_evaluator(
+            args.samples,
+            args.max_steps,
+            args.seed + rebel_iteration - 1,
+            args.resolve_iterations,
+            args.resolve_depth,
+            evaluator,
         )
+        total_samples += len(samples)
+        dataset = ValueDataset(samples)
+        val_size = max(1, int(len(dataset) * args.validation_fraction)) if len(dataset) > 1 else 0
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = random_split(
+            dataset,
+            [train_size, val_size],
+            generator=torch.Generator().manual_seed(args.seed + rebel_iteration - 1),
+        )
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size) if val_size else None
 
-        if val_count:
-            current_val = val_loss / val_count
-            if epoch == 1 or current_val < best_val:
-                best_val = current_val
-                best_state = {key: value.detach().clone() for key, value in model.state_dict().items()}
+        for epoch in range(1, args.epochs + 1):
+            model.train()
+            train_loss = 0.0
+            train_count = 0
+            for features, values in train_loader:
+                optimizer.zero_grad(set_to_none=True)
+                loss = loss_fn(model(features), values)
+                loss.backward()
+                optimizer.step()
+                train_loss += float(loss.item()) * int(features.shape[0])
+                train_count += int(features.shape[0])
+
+            model.eval()
+            val_loss = 0.0
+            val_count = 0
+            if val_loader is not None:
+                with torch.no_grad():
+                    for features, values in val_loader:
+                        loss = loss_fn(model(features), values)
+                        val_loss += float(loss.item()) * int(features.shape[0])
+                        val_count += int(features.shape[0])
+
+            print(
+                json.dumps(
+                    {
+                        "rebel_iteration": rebel_iteration,
+                        "epoch": epoch,
+                        "leaf_evaluator": "value_model",
+                        "train_mse": train_loss / max(train_count, 1),
+                        "val_mse": val_loss / max(val_count, 1) if val_count else None,
+                        "samples": len(dataset),
+                    }
+                )
+            )
+
+            if val_count:
+                current_val = val_loss / val_count
+                if best_state is None or current_val < best_val:
+                    best_val = current_val
+                    best_state = {key: value.detach().clone() for key, value in model.state_dict().items()}
 
     if best_state is not None:
         model.load_state_dict(best_state)
@@ -186,16 +274,18 @@ def train(args: argparse.Namespace) -> None:
     torch.save(
         {
             "schema": SCHEMA,
-            "feature_dim": int(dataset.features.shape[1]),
+            "feature_dim": feature_dim,
             "hidden_dim": args.hidden_dim,
             "model_state_dict": model.state_dict(),
             "metadata": {
                 "epochs": args.epochs,
+                "rebel_iterations": args.rebel_iterations,
                 "seed": args.seed,
-                "samples": len(samples),
+                "samples": total_samples,
                 "max_steps": args.max_steps,
                 "resolve_iterations": args.resolve_iterations,
                 "resolve_depth": args.resolve_depth,
+                "leaf_evaluator": "value_model",
                 "best_val_mse": best_val if best_state is not None else None,
             },
         },
@@ -253,7 +343,10 @@ def compare_model(args: argparse.Namespace) -> None:
 def self_test() -> None:
     require_torch()
     require_bridge()
-    samples = rebel.generate_training_samples(4, 8, 1, 8, 2)
+    feature_dim = infer_feature_dim()
+    model = ValueNet(input_dim=feature_dim, hidden_dim=8)
+    evaluator = make_model_pybind_evaluator(model, feature_dim)
+    samples = rebel.generate_training_samples_with_evaluator(4, 8, 1, 8, 2, evaluator)
     dataset = ValueDataset(samples)
     model = ValueNet(input_dim=int(dataset.features.shape[1]), hidden_dim=8)
     output = model(dataset.features)
@@ -280,12 +373,14 @@ def bridge_callback_self_test() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="rebel_artifacts/small_coup_value.pt")
-    parser.add_argument("--checkpoint", help="checkpoint for --compare-model")
+    parser.add_argument("--checkpoint", help="checkpoint for --compare-model or to initialize training")
+    parser.add_argument("--leaf-checkpoint", help="explicit checkpoint leaf evaluator for --inspect")
     parser.add_argument("--samples", type=int, default=1000)
     parser.add_argument("--max-steps", type=int, default=16)
     parser.add_argument("--resolve-iterations", type=int, default=64)
     parser.add_argument("--resolve-depth", type=int, default=4)
     parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--rebel-iterations", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
@@ -293,6 +388,7 @@ def main() -> None:
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--inspect", action="store_true")
+    parser.add_argument("--bootstrap-heuristic", action="store_true", help="use heuristic leaves for inspection/bootstrap only")
     parser.add_argument("--compare-model", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--bridge-callback-self-test", action="store_true")

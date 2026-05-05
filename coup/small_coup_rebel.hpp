@@ -97,6 +97,9 @@ bool replay_public_history(const Deal& deal, const std::vector<PublicEvent>& his
 std::vector<double> value_features(const PublicState& public_state, const BeliefState& belief, int player);
 TrainingSample make_training_sample(const GameState& state, DepthLimitedResolver& resolver,
                                     const ValueEvaluator& evaluator);
+std::vector<TrainingSample> generate_training_samples_with_evaluator(int samples, int max_steps, uint32_t seed,
+                                                                     int resolve_iterations, int resolve_depth,
+                                                                     const ValueEvaluator& evaluator);
 std::vector<TrainingSample> generate_training_samples(int samples, int max_steps, uint32_t seed,
                                                       int resolve_iterations, int resolve_depth);
 

@@ -362,12 +362,12 @@ TrainingSample make_training_sample(const GameState& state, DepthLimitedResolver
     return sample;
 }
 
-std::vector<TrainingSample> generate_training_samples(int samples, int max_steps, uint32_t seed,
-                                                      int resolve_iterations, int resolve_depth) {
+std::vector<TrainingSample> generate_training_samples_with_evaluator(int samples, int max_steps, uint32_t seed,
+                                                                     int resolve_iterations, int resolve_depth,
+                                                                     const ValueEvaluator& evaluator) {
     if (samples < 0 || max_steps < 0) throw std::invalid_argument("sample counts must be non-negative");
     std::mt19937 rng(seed);
     const auto deals = all_deals();
-    HeuristicValueEvaluator evaluator;
     DepthLimitedResolver resolver(resolve_iterations, resolve_depth, evaluator, seed + 17);
     std::vector<TrainingSample> rows;
     rows.reserve(static_cast<std::size_t>(samples));
@@ -399,6 +399,13 @@ std::vector<TrainingSample> generate_training_samples(int samples, int max_steps
         }
     }
     return rows;
+}
+
+std::vector<TrainingSample> generate_training_samples(int samples, int max_steps, uint32_t seed,
+                                                      int resolve_iterations, int resolve_depth) {
+    HeuristicValueEvaluator evaluator;
+    return generate_training_samples_with_evaluator(samples, max_steps, seed, resolve_iterations,
+                                                    resolve_depth, evaluator);
 }
 
 } // namespace small_coup::rebel

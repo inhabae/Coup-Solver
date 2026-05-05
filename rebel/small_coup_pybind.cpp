@@ -169,4 +169,7 @@ PYBIND11_MODULE(_small_coup_rebel, m) {
     m.def("generate_training_samples", &small_coup::rebel::generate_training_samples,
           py::arg("samples"), py::arg("max_steps") = 16, py::arg("seed") = 1,
           py::arg("resolve_iterations") = 64, py::arg("resolve_depth") = 4);
+    m.def("generate_training_samples_with_evaluator", &small_coup::rebel::generate_training_samples_with_evaluator,
+          py::arg("samples"), py::arg("max_steps"), py::arg("seed"),
+          py::arg("resolve_iterations"), py::arg("resolve_depth"), py::arg("evaluator"));
 }
