@@ -94,6 +94,7 @@ PublicState public_state_from(const GameState& state);
 BeliefState belief_from_public_state(const PublicState& public_state, int known_player = -1,
                                      Card known_card = Card::None);
 bool replay_public_history(const Deal& deal, const std::vector<PublicEvent>& history, GameState& out);
+std::vector<double> value_features(const PublicState& public_state, const BeliefState& belief, int player);
 TrainingSample make_training_sample(const GameState& state, DepthLimitedResolver& resolver,
                                     const ValueEvaluator& evaluator);
 std::vector<TrainingSample> generate_training_samples(int samples, int max_steps, uint32_t seed,

@@ -10,6 +10,23 @@
 
 namespace py = pybind11;
 
+class PyValueEvaluator : public small_coup::rebel::ValueEvaluator {
+public:
+    using small_coup::rebel::ValueEvaluator::ValueEvaluator;
+
+    double evaluate(const small_coup::rebel::PublicState& public_state,
+                    const small_coup::rebel::BeliefState& belief,
+                    int player) const override {
+        PYBIND11_OVERRIDE_PURE(
+            double,
+            small_coup::rebel::ValueEvaluator,
+            evaluate,
+            public_state,
+            belief,
+            player);
+    }
+};
+
 namespace {
 
 std::vector<double> policy_vector(const small_coup::rebel::SearchResult& result) {
@@ -32,6 +49,13 @@ std::vector<small_coup::Action> legal_actions(const small_coup::GameState& state
 small_coup::rebel::SearchResult resolve_heuristic(const small_coup::GameState& state, int player,
                                                   int iterations, int depth, uint32_t seed) {
     small_coup::rebel::HeuristicValueEvaluator evaluator;
+    small_coup::rebel::DepthLimitedResolver resolver(iterations, depth, evaluator, seed);
+    return resolver.resolve(state, player);
+}
+
+small_coup::rebel::SearchResult resolve_with_evaluator(const small_coup::GameState& state,
+                                                       const small_coup::rebel::ValueEvaluator& evaluator,
+                                                       int player, int iterations, int depth, uint32_t seed) {
     small_coup::rebel::DepthLimitedResolver resolver(iterations, depth, evaluator, seed);
     return resolver.resolve(state, player);
 }
@@ -110,6 +134,13 @@ PYBIND11_MODULE(_small_coup_rebel, m) {
         .def_readwrite("value", &small_coup::rebel::SearchResult::value)
         .def_property_readonly("policy", &policy_vector);
 
+    py::class_<small_coup::rebel::ValueEvaluator, PyValueEvaluator>(m, "ValueEvaluator")
+        .def(py::init<>())
+        .def("evaluate", &small_coup::rebel::ValueEvaluator::evaluate);
+
+    py::class_<small_coup::rebel::HeuristicValueEvaluator, small_coup::rebel::ValueEvaluator>(m, "HeuristicValueEvaluator")
+        .def(py::init<>());
+
     py::class_<small_coup::rebel::TrainingSample>(m, "TrainingSample")
         .def_readwrite("public_state", &small_coup::rebel::TrainingSample::public_state)
         .def_readwrite("belief", &small_coup::rebel::TrainingSample::belief)
@@ -127,9 +158,14 @@ PYBIND11_MODULE(_small_coup_rebel, m) {
     m.def("public_state_from", &small_coup::rebel::public_state_from);
     m.def("belief_from_public_state", &small_coup::rebel::belief_from_public_state,
           py::arg("public_state"), py::arg("known_player") = -1, py::arg("known_card") = small_coup::Card::None);
+    m.def("value_features", &small_coup::rebel::value_features,
+          py::arg("public_state"), py::arg("belief"), py::arg("player"));
     m.def("resolve_heuristic", &resolve_heuristic,
           py::arg("state"), py::arg("player"), py::arg("iterations") = 64, py::arg("depth") = 4,
           py::arg("seed") = 1);
+    m.def("resolve_with_evaluator", &resolve_with_evaluator,
+          py::arg("state"), py::arg("evaluator"), py::arg("player"), py::arg("iterations") = 64,
+          py::arg("depth") = 4, py::arg("seed") = 1);
     m.def("generate_training_samples", &small_coup::rebel::generate_training_samples,
           py::arg("samples"), py::arg("max_steps") = 16, py::arg("seed") = 1,
           py::arg("resolve_iterations") = 64, py::arg("resolve_depth") = 4);

@@ -123,9 +123,7 @@ double BeliefState::probability_sum() const {
 }
 
 std::vector<double> TrainingSample::features() const {
-    std::vector<double> out = public_state.features();
-    out.insert(out.end(), belief.probabilities.begin(), belief.probabilities.end());
-    return out;
+    return value_features(public_state, belief, player);
 }
 
 double HeuristicValueEvaluator::evaluate(const PublicState& public_state, const BeliefState&, int player) const {
@@ -298,6 +296,14 @@ bool replay_public_history(const Deal& deal, const std::vector<PublicEvent>& his
     }
 }
 
+std::vector<double> value_features(const PublicState& public_state, const BeliefState& belief, int player) {
+    if (player < 0 || player >= kPlayers) throw std::invalid_argument("invalid value feature player");
+    std::vector<double> out = public_state.features();
+    out.insert(out.end(), belief.probabilities.begin(), belief.probabilities.end());
+    out.push_back(static_cast<double>(player));
+    return out;
+}
+
 TrainingSample make_training_sample(const GameState& state, DepthLimitedResolver& resolver,
                                     const ValueEvaluator& evaluator) {
     TrainingSample sample;
@@ -324,6 +330,12 @@ std::vector<TrainingSample> generate_training_samples(int samples, int max_steps
         for (int step = 0; step < max_steps && !state.is_terminal(); ++step) {
             TrainingSample sample_row = make_training_sample(state, resolver, evaluator);
             rows.push_back(sample_row);
+            if (static_cast<int>(rows.size()) >= samples) return rows;
+            TrainingSample opponent_row = sample_row;
+            opponent_row.player = 1 - sample_row.player;
+            opponent_row.target_value = evaluator.evaluate(opponent_row.public_state, opponent_row.belief,
+                                                           opponent_row.player);
+            rows.push_back(opponent_row);
             if (static_cast<int>(rows.size()) >= samples) return rows;
 
             const std::vector<Action> actions = actions_from_mask(state.legal_actions());
